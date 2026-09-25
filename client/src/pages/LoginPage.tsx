@@ -387,7 +387,23 @@ export const LoginPage: React.FC = () => {
           {errorMsg && (
             <div className="p-3 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs flex items-start gap-2 animate-in fade-in">
               <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
-              <div className="flex-1 leading-relaxed font-medium">{errorMsg}</div>
+              <div className="flex-1 leading-relaxed font-medium">
+                <div>{errorMsg}</div>
+                {mode === 'login' && (errorMsg.includes('No registered account') || errorMsg.includes('Invalid credentials') || errorMsg.includes('Create an account')) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMode('create');
+                      if (loginEmail) setCreateEmail(loginEmail);
+                      setErrorMsg(null);
+                    }}
+                    className="mt-2.5 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-brand-600 hover:bg-brand-500 text-white font-bold text-xs shadow transition-all cursor-pointer"
+                  >
+                    <UserPlus className="w-3.5 h-3.5" />
+                    <span>Create Account with OTP &rarr;</span>
+                  </button>
+                )}
+              </div>
             </div>
           )}
 
@@ -787,6 +803,35 @@ export const LoginPage: React.FC = () => {
           {/* ========================================== */}
           {mode === 'login' && (
             <form onSubmit={handleLoginSubmit} className="space-y-4">
+              {/* Quick Evaluation / Admin Helper Bar */}
+              <div className="flex items-center justify-between p-2 rounded-xl bg-slate-900/90 border border-slate-700/80 text-[11px]">
+                <span className="text-slate-400 font-medium">Quick Login:</span>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setLoginEmail('btprem166@gmail.com');
+                      setLoginPassword('DocuSetu2026!');
+                      setErrorMsg(null);
+                    }}
+                    className="px-2 py-0.5 rounded-lg bg-brand-500/20 hover:bg-brand-500/30 text-brand-300 font-semibold border border-brand-500/30 transition-colors cursor-pointer"
+                  >
+                    Prem (Admin)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setLoginEmail('broker@docusetu.io');
+                      setLoginPassword('DocuSetu2026!');
+                      setErrorMsg(null);
+                    }}
+                    className="px-2 py-0.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium border border-slate-700 transition-colors cursor-pointer"
+                  >
+                    Demo Broker
+                  </button>
+                </div>
+              </div>
+
               {/* Registered Email */}
               <div>
                 <div className="flex items-center justify-between mb-1.5">
