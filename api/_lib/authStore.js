@@ -42,10 +42,23 @@ export function hashPassword(password) {
 export function verifyPassword(password, storedHash) {
   try {
     const [salt, key] = storedHash.split(':');
-    const hash = crypto.pbkdf2Sync(password, salt, 100000, 64, 'sha512').toString('hex');
     const keyBuf = Buffer.from(key, 'hex');
-    const hashBuf = Buffer.from(hash, 'hex');
-    return crypto.timingSafeEqual(keyBuf, hashBuf);
+
+    // SHA-512 check
+    const hash512 = crypto.pbkdf2Sync(password, salt, 100000, 64, 'sha512').toString('hex');
+    const hashBuf512 = Buffer.from(hash512, 'hex');
+    if (keyBuf.length === hashBuf512.length && crypto.timingSafeEqual(keyBuf, hashBuf512)) {
+      return true;
+    }
+
+    // SHA-256 check (cross-compatible with Express server)
+    const hash256 = crypto.pbkdf2Sync(password, salt, 100000, 64, 'sha256').toString('hex');
+    const hashBuf256 = Buffer.from(hash256, 'hex');
+    if (keyBuf.length === hashBuf256.length && crypto.timingSafeEqual(keyBuf, hashBuf256)) {
+      return true;
+    }
+
+    return false;
   } catch {
     return false;
   }

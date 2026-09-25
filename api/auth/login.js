@@ -1,4 +1,5 @@
-import { getStoredUsers, verifyPassword, createToken } from '../_lib/authStore.js';
+import { getStoredUsers, saveUser, verifyPassword, createToken } from '../_lib/authStore.js';
+import { getSupabase } from '../_lib/supabaseClient.js';
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Credentials', 'true');
@@ -25,7 +26,36 @@ export default async function handler(req, res) {
 
     const normalizedEmail = email.trim().toLowerCase();
     const users = getStoredUsers();
-    const user = users.get(normalizedEmail);
+    let user = users.get(normalizedEmail);
+
+    // If user is not in serverless lambda memory, query remote Supabase database
+    if (!user) {
+      const supabase = getSupabase();
+      if (supabase) {
+        try {
+          const { data: supaUser, error: supaErr } = await supabase
+            .from('users')
+            .select('*')
+            .eq('email', normalizedEmail)
+            .maybeSingle();
+
+          if (supaUser && !supaErr) {
+            user = {
+              id: supaUser.id,
+              email: supaUser.email,
+              fullName: supaUser.full_name || supaUser.fullName || normalizedEmail.split('@')[0],
+              role: supaUser.role || 'Compliance Officer',
+              organizationId: supaUser.organization_id || '11111111-1111-4111-8111-111111111111',
+              passwordHash: supaUser.password_hash,
+              createdAt: supaUser.created_at
+            };
+            saveUser(normalizedEmail, user);
+          }
+        } catch (dbErr) {
+          console.warn('Supabase login check note:', dbErr.message);
+        }
+      }
+    }
 
     if (!user || !user.passwordHash) {
       res.status(401).json({ error: 'Invalid credentials. No registered account found with this email. Please create an account first.' });
@@ -36,6 +66,19 @@ export default async function handler(req, res) {
     if (!isMatch) {
       res.status(401).json({ error: 'Incorrect password. Please verify your credentials and try again.' });
       return;
+    }
+
+    // Update last_login_at in remote Supabase
+    const supabase = getSupabase();
+    if (supabase) {
+      try {
+        await supabase
+          .from('users')
+          .update({ last_login_at: new Date().toISOString() })
+          .eq('email', normalizedEmail);
+      } catch {
+        // Non-blocking update
+      }
     }
 
     const token = createToken(user);

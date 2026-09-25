@@ -44,12 +44,27 @@ export function hashPassword(password: string): string {
 
 export function verifyPassword(password: string, storedHash?: string): boolean {
   if (!storedHash || !storedHash.includes(':')) return false;
-  const [salt, originalHash] = storedHash.split(':');
-  const hashToVerify = crypto.pbkdf2Sync(password, salt, 100000, 64, 'sha256').toString('hex');
-  const hashBuf = Buffer.from(hashToVerify, 'hex');
-  const origBuf = Buffer.from(originalHash, 'hex');
-  if (hashBuf.length !== origBuf.length) return false;
-  return crypto.timingSafeEqual(hashBuf, origBuf);
+  try {
+    const [salt, originalHash] = storedHash.split(':');
+    const origBuf = Buffer.from(originalHash, 'hex');
+
+    // SHA-256
+    const hash256 = crypto.pbkdf2Sync(password, salt, 100000, 64, 'sha256').toString('hex');
+    const hashBuf256 = Buffer.from(hash256, 'hex');
+    if (hashBuf256.length === origBuf.length && crypto.timingSafeEqual(hashBuf256, origBuf)) {
+      return true;
+    }
+
+    // SHA-512 (cross-compatible with serverless API)
+    const hash512 = crypto.pbkdf2Sync(password, salt, 100000, 64, 'sha512').toString('hex');
+    const hashBuf512 = Buffer.from(hash512, 'hex');
+    if (hashBuf512.length === origBuf.length && crypto.timingSafeEqual(hashBuf512, origBuf)) {
+      return true;
+    }
+  } catch {
+    return false;
+  }
+  return false;
 }
 
 function generateSessionToken(user: { id: string; email: string; organizationId: string; role: string }): string {

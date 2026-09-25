@@ -178,6 +178,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         code: params.code
       });
 
+      // Also ensure user record exists in Supabase public.users table directly
+      if (!isMockSupabase) {
+        try {
+          await supabase.from('users').upsert({
+            id: res.user.id,
+            email: normalizedEmail,
+            full_name: params.fullName.trim(),
+            role: res.user.role || 'Customs Broker & Compliance Officer',
+            organization_id: res.user.organizationId || '11111111-1111-4111-8111-111111111111',
+            email_verified: true,
+            last_login_at: new Date().toISOString()
+          }, { onConflict: 'email' });
+        } catch (dbErr: any) {
+          console.warn('Client Supabase users sync note:', dbErr.message);
+        }
+      }
+
       const profile: UserProfile = {
         id: res.user.id,
         email: normalizedEmail,

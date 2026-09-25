@@ -1,4 +1,5 @@
 import { pendingOtps, saveUser, hashPassword, createToken, checkVerifiedToken } from '../_lib/authStore.js';
+import { getSupabase } from '../_lib/supabaseClient.js';
 import crypto from 'crypto';
 
 export default async function handler(req, res) {
@@ -57,6 +58,37 @@ export default async function handler(req, res) {
 
     saveUser(normalizedEmail, user);
     pendingOtps.delete(normalizedEmail);
+
+    // Persist into remote Supabase database if configured
+    const supabase = getSupabase();
+    if (supabase) {
+      try {
+        await supabase.from('organizations').upsert({
+          id: '11111111-1111-4111-8111-111111111111',
+          name: 'Apex Global Freight & Customs Brokerage'
+        }, { onConflict: 'id' });
+
+        const { data: supaUser, error: supaErr } = await supabase.from('users').upsert({
+          id: user.id,
+          email: normalizedEmail,
+          full_name: fullName.trim(),
+          role: 'Customs Broker & Compliance Officer',
+          organization_id: '11111111-1111-4111-8111-111111111111',
+          password_hash: passwordHash,
+          email_verified: true,
+          created_at: user.createdAt,
+          last_login_at: new Date().toISOString()
+        }, { onConflict: 'email' }).select().single();
+
+        if (supaErr) {
+          console.warn('Supabase users table insert note:', supaErr.message);
+        } else if (supaUser) {
+          user.id = supaUser.id;
+        }
+      } catch (err) {
+        console.warn('Supabase DB connection note:', err.message);
+      }
+    }
 
     const token = createToken(user);
 

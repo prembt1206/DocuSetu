@@ -416,6 +416,12 @@ class DatabaseService {
 
     if (this.isConnectedToSupabase && this.supabase) {
       try {
+        // Ensure organization exists before inserting user to satisfy foreign key constraint
+        await this.supabase.from('organizations').upsert({
+          id: orgId,
+          name: 'Apex Global Freight & Customs Brokerage'
+        }, { onConflict: 'id' });
+
         const payload: any = {
           id: record.id,
           email: record.email,
@@ -425,18 +431,22 @@ class DatabaseService {
         };
         if (record.password_hash) payload.password_hash = record.password_hash;
         if (record.email_verified !== undefined) payload.email_verified = record.email_verified;
+        if (record.created_at) payload.created_at = record.created_at;
+        if (record.last_login_at) payload.last_login_at = record.last_login_at;
 
         const { data: supaUser, error } = await this.supabase
           .from('users')
-          .upsert(payload)
+          .upsert(payload, { onConflict: 'email' })
           .select()
           .single();
 
         if (!error && supaUser) {
           record.id = supaUser.id;
+        } else if (error) {
+          logger.warn('Supabase DB users upsert error: ' + error.message);
         }
-      } catch (err) {
-        logger.warn('Supabase DB users upsert fallback note:', err);
+      } catch (err: any) {
+        logger.warn('Supabase DB users upsert fallback note: ' + err.message);
       }
     }
 

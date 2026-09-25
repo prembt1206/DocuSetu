@@ -108,22 +108,31 @@ RETURNS UUID AS $$
 $$ LANGUAGE sql STABLE SECURITY DEFINER;
 
 -- Organizations Policies
-CREATE POLICY "Users can view their own organization"
+CREATE POLICY "Allow organization read"
 ON organizations FOR SELECT
-USING (id = get_current_user_org_id());
+USING (true);
+
+CREATE POLICY "Allow organization insert"
+ON organizations FOR INSERT
+WITH CHECK (true);
 
 -- Users Policies
-CREATE POLICY "Users can view users within same organization"
+CREATE POLICY "Allow user email lookup"
 ON users FOR SELECT
-USING (organization_id = get_current_user_org_id());
+USING (true);
 
-CREATE POLICY "Users can insert their own user record"
+CREATE POLICY "Allow user registration"
 ON users FOR INSERT
-WITH CHECK (id = auth.uid());
+WITH CHECK (true);
 
-CREATE POLICY "Users can update their own user record"
+CREATE POLICY "Allow user update"
 ON users FOR UPDATE
-USING (id = auth.uid());
+USING (true);
+
+-- Ensure default initial organization exists
+INSERT INTO organizations (id, name)
+VALUES ('11111111-1111-4111-8111-111111111111', 'Apex Global Freight & Customs Brokerage')
+ON CONFLICT (id) DO NOTHING;
 
 -- Organization Settings Policies
 CREATE POLICY "Users can view their organization settings"
