@@ -32,10 +32,10 @@ export const authMiddleware = async (req: Request, res: Response, next: NextFunc
       return;
     }
 
-    // Verify DocuSetu JWT session token
-    if (token.startsWith('docusetu-jwt-')) {
+    // Verify DocuSetu session token (supports both server and client formats)
+    if (token.startsWith('docusetu-jwt-') || token.startsWith('docusetu-token-')) {
       try {
-        const payloadBase64 = token.replace('docusetu-jwt-', '');
+        const payloadBase64 = token.replace('docusetu-jwt-', '').replace('docusetu-token-', '');
         const payload = JSON.parse(Buffer.from(payloadBase64, 'base64').toString('utf8'));
 
         if (!payload.id || !payload.email) {
@@ -51,7 +51,7 @@ export const authMiddleware = async (req: Request, res: Response, next: NextFunc
         };
         return next();
       } catch (e) {
-        logger.warn('Failed to parse docusetu-jwt token:', e);
+        logger.warn('Failed to parse docusetu session token:', e);
         res.status(401).json({ error: 'Unauthorized: Invalid session token signature.' });
         return;
       }

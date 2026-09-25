@@ -49,6 +49,11 @@ async function safeJsonParse<T = any>(res: Response): Promise<{ success: boolean
     try {
       const json = JSON.parse(text);
       if (!res.ok) {
+        if (status === 401 && typeof window !== 'undefined' && !window.location.pathname.includes('/login')) {
+          localStorage.removeItem('docusetu_auth_token');
+          localStorage.removeItem('docusetu_user');
+          window.location.href = '/login';
+        }
         return {
           success: false,
           error: json.error || json.message || `Request failed with status ${status}`,
