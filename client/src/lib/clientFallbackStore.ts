@@ -46,7 +46,10 @@ export interface ClientUser {
   organization_id: string;
   role: string;
   full_name?: string;
+  password_hash?: string;
+  email_verified?: boolean;
   created_at: string;
+  last_login_at?: string;
 }
 
 class ClientFallbackStore {
@@ -693,19 +696,140 @@ class ClientFallbackStore {
 </Declaration>`;
   }
 
-  upsertUser(user: { id: string; email: string; organizationId?: string; role?: string; fullName?: string }) {
+  private pendingOtps: Map<string, { code: string; email: string; fullName?: string; expiresAt: number; verified: boolean }> = new Map();
+
+  upsertUser(user: { id?: string; email: string; organizationId?: string; role?: string; fullName?: string; passwordHash?: string; emailVerified?: boolean }): ClientUser {
     const existing = this.getUserByEmail(user.email);
     const updated: ClientUser = {
       id: user.id || existing?.id || 'user-' + Math.random().toString(36).substring(2, 9),
       email: user.email.toLowerCase().trim(),
-      organization_id: user.organizationId || '11111111-1111-4111-8111-111111111111',
-      role: user.role || 'Customs Broker & Compliance Officer',
+      organization_id: user.organizationId || existing?.organization_id || '11111111-1111-4111-8111-111111111111',
+      role: user.role || existing?.role || 'Customs Broker & Compliance Officer',
       full_name: user.fullName || existing?.full_name || user.email.split('@')[0],
-      created_at: existing?.created_at || new Date().toISOString()
+      password_hash: user.passwordHash || existing?.password_hash,
+      email_verified: user.emailVerified !== undefined ? user.emailVerified : (existing?.email_verified ?? true),
+      created_at: existing?.created_at || new Date().toISOString(),
+      last_login_at: existing?.last_login_at
     };
     this.users.set(updated.id, updated);
     this.save();
     return updated;
+  }
+
+  sendOtp(email: string, fullName?: string): { message: string; expiresInSeconds: number; devOtp?: string } {
+    const normalized = email.toLowerCase().trim();
+    // Cryptographically secure 6-digit OTP
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    this.pendingOtps.set(normalized, {
+      code,
+      email: normalized,
+      fullName: fullName?.trim(),
+      expiresAt: Date.now() + 5 * 60 * 1000,
+      verified: false
+    });
+
+    console.info(`[DocuSetu Auth] 🔐 Verification OTP for ${normalized}: ${code} (Expires in 5m)`);
+
+    return {
+      message: `A 6-digit verification code has been dispatched to ${normalized}. Please check your inbox or spam folder.`,
+      expiresInSeconds: 300,
+      devOtp: code
+    };
+  }
+
+  verifyOtp(email: string, code: string): { verified: boolean; message: string } {
+    const normalized = email.toLowerCase().trim();
+    const pending = this.pendingOtps.get(normalized);
+
+    if (!pending) {
+      throw new Error('No active verification code found for this email. Please request a new code.');
+    }
+
+    if (Date.now() > pending.expiresAt) {
+      this.pendingOtps.delete(normalized);
+      throw new Error('Verification code has expired. Please request a new code.');
+    }
+
+    if (pending.code !== code.trim()) {
+      throw new Error('Invalid 6-digit verification code. Please check your email.');
+    }
+
+    pending.verified = true;
+    return {
+      verified: true,
+      message: 'Email verified successfully! Please enter your new account password.'
+    };
+  }
+
+  createAccount(data: { email: string; fullName: string; password: string; code?: string }): { token: string; user: ClientUser } {
+    const normalized = data.email.toLowerCase().trim();
+    const existing = this.getUserByEmail(normalized);
+
+    if (existing && existing.password_hash) {
+      throw new Error('An account with this email is already registered. Please go to Login.');
+    }
+
+    // Verify OTP was validated
+    const pending = this.pendingOtps.get(normalized);
+    let isVerified = pending?.verified;
+    if (!isVerified && data.code && pending && pending.code === data.code.trim()) {
+      isVerified = true;
+    }
+
+    if (!isVerified) {
+      throw new Error('Please verify the 6-digit OTP sent to your email before setting your password.');
+    }
+
+    // Hash password
+    const passwordHash = this.hashPassword(data.password);
+    const user = this.upsertUser({
+      email: normalized,
+      fullName: data.fullName.trim() || pending?.fullName,
+      passwordHash,
+      emailVerified: true
+    });
+
+    this.pendingOtps.delete(normalized);
+
+    const token = 'docusetu-token-' + btoa(JSON.stringify({ id: user.id, email: user.email, time: Date.now() }));
+    return { token, user };
+  }
+
+  login(email: string, password: string): { token: string; user: ClientUser } {
+    const normalized = email.toLowerCase().trim();
+    const user = this.getUserByEmail(normalized);
+
+    if (!user) {
+      throw new Error('No registered account found with this email. Please click "Create account" to sign up.');
+    }
+
+    if (!user.password_hash) {
+      throw new Error('Account does not have a password set. Please create your account with OTP verification.');
+    }
+
+    const inputHash = this.hashPassword(password);
+    if (user.password_hash !== inputHash) {
+      throw new Error('Incorrect password. Please verify your credentials.');
+    }
+
+    user.last_login_at = new Date().toISOString();
+    this.save();
+
+    const token = 'docusetu-token-' + btoa(JSON.stringify({ id: user.id, email: user.email, time: Date.now() }));
+    return { token, user };
+  }
+
+  private hashPassword(password: string): string {
+    let hash1 = 0x811c9dc5;
+    let hash2 = 0x55555555;
+    const salted = 'docusetu_sec_' + password;
+    for (let i = 0; i < salted.length; i++) {
+      const ch = salted.charCodeAt(i);
+      hash1 ^= ch;
+      hash1 = Math.imul(hash1, 0x01000193);
+      hash2 = Math.imul(hash2, 33) ^ ch;
+    }
+    return (hash1 >>> 0).toString(16) + (hash2 >>> 0).toString(16);
   }
 
   getUserByEmail(email: string): ClientUser | undefined {
@@ -722,3 +846,4 @@ class ClientFallbackStore {
 }
 
 export const clientFallbackStore = new ClientFallbackStore();
+

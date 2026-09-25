@@ -55,13 +55,25 @@ export interface DbOrganizationSettings {
   updated_at: string;
 }
 
+export interface DbUser {
+  id: string;
+  organization_id: string;
+  email: string;
+  role: string;
+  full_name?: string;
+  password_hash?: string;
+  email_verified?: boolean;
+  created_at: string;
+  last_login_at?: string;
+}
+
 class DatabaseService {
   private supabase: SupabaseClient | null = null;
   private isConnectedToSupabase = false;
 
   // Local resilient storage for instant out-of-the-box operation and RLS isolation
   private localOrgs: Map<string, { id: string; name: string; created_at: string }> = new Map();
-  private localUsers: Map<string, { id: string; organization_id: string; email: string; role: string }> = new Map();
+  private localUsers: Map<string, DbUser> = new Map();
   private localShipments: Map<string, DbShipment> = new Map();
   private localDocuments: Map<string, DbDocument> = new Map();
   private localExtractedData: Map<string, DbExtractedData> = new Map();
@@ -106,7 +118,9 @@ class DatabaseService {
       id: defaultUserId,
       organization_id: defaultOrgId,
       email: 'broker@docusetu.io',
-      role: 'admin'
+      role: 'admin',
+      created_at: new Date(Date.now() - 30 * 86400000).toISOString(),
+      email_verified: true
     });
 
     this.localSettings.set(defaultOrgId, {
@@ -372,47 +386,134 @@ class DatabaseService {
   // ==========================================
   // Users Operations
   // ==========================================
-  async upsertUser(data: { id: string; email: string; organization_id?: string; role?: string; full_name?: string }) {
+  async upsertUser(data: {
+    id: string;
+    email: string;
+    organization_id?: string;
+    role?: string;
+    full_name?: string;
+    password_hash?: string;
+    email_verified?: boolean;
+    last_login_at?: string;
+  }): Promise<DbUser> {
     const orgId = data.organization_id || '11111111-1111-4111-8111-111111111111';
     const role = data.role || 'Customs Broker & Compliance Officer';
+    const normalizedEmail = data.email.trim().toLowerCase();
 
-    if (this.isConnectedToSupabase && this.supabase) {
-      const { data: userRecord, error } = await this.supabase
-        .from('users')
-        .upsert({
-          id: data.id,
-          email: data.email,
-          full_name: data.full_name || null,
-          organization_id: orgId,
-          role: role
-        })
-        .select()
-        .single();
-      if (!error && userRecord) return userRecord;
-    }
+    const existingLocal = this.localUsers.get(data.id) || Array.from(this.localUsers.values()).find(u => u.email.toLowerCase() === normalizedEmail);
 
-    const record = {
+    const record: DbUser = {
       id: data.id,
-      email: data.email,
-      full_name: data.full_name || '',
+      email: normalizedEmail,
+      full_name: data.full_name !== undefined ? data.full_name : (existingLocal?.full_name || ''),
       organization_id: orgId,
       role: role,
-      created_at: new Date().toISOString()
+      password_hash: data.password_hash !== undefined ? data.password_hash : existingLocal?.password_hash,
+      email_verified: data.email_verified !== undefined ? data.email_verified : (existingLocal?.email_verified ?? true),
+      created_at: existingLocal?.created_at || new Date().toISOString(),
+      last_login_at: data.last_login_at || existingLocal?.last_login_at
     };
-    this.localUsers.set(data.id, record);
+
+    if (this.isConnectedToSupabase && this.supabase) {
+      try {
+        const payload: any = {
+          id: record.id,
+          email: record.email,
+          full_name: record.full_name || null,
+          organization_id: record.organization_id,
+          role: record.role
+        };
+        if (record.password_hash) payload.password_hash = record.password_hash;
+        if (record.email_verified !== undefined) payload.email_verified = record.email_verified;
+
+        const { data: supaUser, error } = await this.supabase
+          .from('users')
+          .upsert(payload)
+          .select()
+          .single();
+
+        if (!error && supaUser) {
+          record.id = supaUser.id;
+        }
+      } catch (err) {
+        logger.warn('Supabase DB users upsert fallback note:', err);
+      }
+    }
+
+    this.localUsers.set(record.id, record);
     return record;
   }
 
-  async getUserByEmail(email: string) {
+  async createUser(data: {
+    id?: string;
+    email: string;
+    full_name?: string;
+    password_hash: string;
+    organization_id?: string;
+    role?: string;
+  }): Promise<DbUser> {
+    const id = data.id || uuidv4();
+    return this.upsertUser({
+      id,
+      email: data.email,
+      full_name: data.full_name,
+      password_hash: data.password_hash,
+      organization_id: data.organization_id,
+      role: data.role || 'Customs Broker & Compliance Officer',
+      email_verified: true
+    });
+  }
+
+  async updateUser(id: string, updates: Partial<DbUser>): Promise<DbUser | null> {
+    const existing = this.localUsers.get(id);
+    if (!existing) return null;
+
+    const updated: DbUser = {
+      ...existing,
+      ...updates
+    };
+
     if (this.isConnectedToSupabase && this.supabase) {
-      const { data, error } = await this.supabase
-        .from('users')
-        .select('*')
-        .eq('email', email.trim().toLowerCase())
-        .single();
-      if (!error && data) return data;
+      try {
+        await this.supabase.from('users').update(updates).eq('id', id);
+      } catch (err) {
+        logger.warn('Supabase DB users update note:', err);
+      }
     }
-    return Array.from(this.localUsers.values()).find(u => u.email.toLowerCase() === email.trim().toLowerCase()) || null;
+
+    this.localUsers.set(id, updated);
+    return updated;
+  }
+
+  async getUserByEmail(email: string): Promise<DbUser | null> {
+    const normalized = email.trim().toLowerCase();
+
+    if (this.isConnectedToSupabase && this.supabase) {
+      try {
+        const { data, error } = await this.supabase
+          .from('users')
+          .select('*')
+          .eq('email', normalized)
+          .single();
+        if (!error && data) {
+          return {
+            id: data.id,
+            email: data.email,
+            full_name: data.full_name,
+            organization_id: data.organization_id,
+            role: data.role,
+            password_hash: data.password_hash,
+            email_verified: data.email_verified,
+            created_at: data.created_at,
+            last_login_at: data.last_login_at
+          };
+        }
+      } catch (err) {
+        // Fall back to local
+      }
+    }
+
+    return Array.from(this.localUsers.values()).find(u => u.email.toLowerCase() === normalized) || null;
   }
 
   // ==========================================

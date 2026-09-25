@@ -1,3 +1,2 @@
-:; exec npm "$@"
 @echo off
-npm %*
+"C:\Program Files\nodejs\npm.cmd" %*

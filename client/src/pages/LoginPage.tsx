@@ -14,44 +14,70 @@ import {
   ArrowLeft,
   Inbox,
   Lock,
-  Sparkles
+  Eye,
+  EyeOff,
+  Check,
+  UserPlus,
+  LogIn
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth.js';
+import { validateEmail, validatePassword } from '@shared/validations.js';
 
 export const LoginPage: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const {
-    validateGmail,
     sendOtp,
     verifyOtp,
-    loginAsDemo,
-    isLoading
+    createAccount,
+    login,
+    isLoading: isAuthLoading
   } = useAuth();
 
-  // Step state: 'email' | 'otp'
-  const [step, setStep] = useState<'email' | 'otp'>('email');
+  // Mode: 'create' (Create account) | 'login' (Login)
+  const [mode, setMode] = useState<'create' | 'login'>('create');
 
-  // Input states
-  const [email, setEmail] = useState('');
+  // Create Account Sub-Steps: 'email_name' | 'otp' | 'password'
+  const [createStep, setCreateStep] = useState<'email_name' | 'otp' | 'password'>('email_name');
+
+  // Form Inputs for Create Account
   const [fullName, setFullName] = useState('');
+  const [createEmail, setCreateEmail] = useState('');
   const [otpDigits, setOtpDigits] = useState<string[]>(['', '', '', '', '', '']);
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
-  // UI / Feedback states
-  const [emailTouched, setEmailTouched] = useState(false);
+  // Form Inputs for Login
+  const [loginEmail, setLoginEmail] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
+  const [showLoginPassword, setShowLoginPassword] = useState(false);
+
+  // UI / Feedback States
+  const [createEmailTouched, setCreateEmailTouched] = useState(false);
+  const [loginEmailTouched, setLoginEmailTouched] = useState(false);
+  const [passwordTouched, setPasswordTouched] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [resendTimer, setResendTimer] = useState<number>(0);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const otpInputsRef = useRef<(HTMLInputElement | null)[]>([]);
-
   const from = location.state?.from?.pathname || '/dashboard';
 
-  // Strict Real-time Gmail validation
-  const validationResult = validateGmail(email);
-  const isGmailValid = validationResult.isValid;
+  // Real-time email validation
+  const createEmailValidation = validateEmail(createEmail);
+  const isCreateEmailValid = createEmailValidation.isValid;
 
-  // Countdown timer effect for OTP resend
+  const loginEmailValidation = validateEmail(loginEmail);
+  const isLoginEmailValid = loginEmailValidation.isValid;
+
+  // Real-time password strength validation
+  const passwordValidation = validatePassword(password);
+  const doPasswordsMatch = password.length > 0 && password === confirmPassword;
+
+  // Countdown timer for OTP resend
   useEffect(() => {
     let timer: NodeJS.Timeout;
     if (resendTimer > 0) {
@@ -60,45 +86,61 @@ export const LoginPage: React.FC = () => {
     return () => clearTimeout(timer);
   }, [resendTimer]);
 
-  // Focus first OTP input when moving to OTP step
+  // Focus first OTP input when entering OTP step
   useEffect(() => {
-    if (step === 'otp') {
+    if (mode === 'create' && createStep === 'otp') {
       setTimeout(() => {
         otpInputsRef.current[0]?.focus();
       }, 100);
     }
-  }, [step]);
+  }, [mode, createStep]);
 
-  // Handle Requesting OTP
-  const handleRequestOtp = async (e: React.FormEvent) => {
+  // Reset feedback when switching tabs
+  const handleSwitchMode = (newMode: 'create' | 'login') => {
+    setMode(newMode);
+    setErrorMsg(null);
+    setSuccessMsg(null);
+  };
+
+  // ==========================================
+  // CREATE ACCOUNT: Step 1 - Send OTP
+  // ==========================================
+  const handleSendOtpSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setEmailTouched(true);
+    setCreateEmailTouched(true);
     setErrorMsg(null);
     setSuccessMsg(null);
 
-    if (!isGmailValid) {
-      setErrorMsg(validationResult.error || 'Please enter a valid @gmail.com address.');
+    if (!fullName.trim()) {
+      setErrorMsg('Please enter your full name.');
       return;
     }
 
+    if (!isCreateEmailValid) {
+      setErrorMsg(createEmailValidation.error || 'Please enter a valid email address.');
+      return;
+    }
+
+    setIsSubmitting(true);
     try {
-      const res = await sendOtp(email);
-      setSuccessMsg(res.message || `A 6-digit security code has been sent to ${email}`);
+      const res = await sendOtp(createEmail, fullName.trim());
+      setSuccessMsg(res.message || `A 6-digit security OTP has been sent to ${createEmail}`);
       setResendTimer(60);
-      setStep('otp');
+      setCreateStep('otp');
     } catch (err: any) {
-      setErrorMsg(err.message || 'Failed to dispatch verification code. Please verify your email and try again.');
+      setErrorMsg(err.message || 'Failed to dispatch verification code. Please check your email and try again.');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
-  // Handle OTP Digit Input changes
+  // Handle OTP digit changes
   const handleDigitChange = (index: number, val: string) => {
-    // Only accept numeric characters
     const cleanVal = val.replace(/\D/g, '');
     const newDigits = [...otpDigits];
 
     if (cleanVal.length > 1) {
-      // Pasted multi-digit OTP
+      // Pasted full OTP
       const pastedDigits = cleanVal.slice(0, 6).split('');
       pastedDigits.forEach((d, i) => {
         if (i < 6) newDigits[i] = d;
@@ -112,7 +154,7 @@ export const LoginPage: React.FC = () => {
     newDigits[index] = cleanVal;
     setOtpDigits(newDigits);
 
-    // Auto advance to next box
+    // Auto-advance to next input box
     if (cleanVal && index < 5) {
       otpInputsRef.current[index + 1]?.focus();
     }
@@ -124,42 +166,119 @@ export const LoginPage: React.FC = () => {
     }
   };
 
-  // Submit OTP Verification strictly
+  // ==========================================
+  // CREATE ACCOUNT: Step 2 - Verify OTP
+  // ==========================================
   const handleVerifyOtpSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
-    const fullOtp = otpDigits.join('');
+    setSuccessMsg(null);
 
+    const fullOtp = otpDigits.join('');
     if (fullOtp.length !== 6) {
-      setErrorMsg('Please enter all 6 digits of the verification code received in your Gmail.');
+      setErrorMsg('Please enter the complete 6-digit code received in your email.');
       return;
     }
 
+    setIsSubmitting(true);
     try {
-      await verifyOtp(email, fullOtp, fullName.trim() || undefined);
-      setSuccessMsg('Gmail verified successfully! Authenticating portal session...');
-      setTimeout(() => {
-        navigate(from, { replace: true });
-      }, 500);
+      const res = await verifyOtp(createEmail, fullOtp);
+      setSuccessMsg(res.message || 'Email verified successfully! Now create your account password.');
+      setCreateStep('password');
     } catch (err: any) {
-      setErrorMsg(err.message || 'Verification failed. Please check the code in your Gmail inbox.');
+      setErrorMsg(err.message || 'Invalid or expired verification code. Please check your email inbox.');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
-  // Handle Resend OTP
-  const handleResend = async () => {
+  const handleResendOtp = async () => {
     if (resendTimer > 0) return;
     setErrorMsg(null);
     try {
-      const res = await sendOtp(email);
-      setSuccessMsg(res.message || `A new 6-digit code has been sent to ${email}`);
+      const res = await sendOtp(createEmail, fullName.trim());
+      setSuccessMsg(res.message || `A new 6-digit verification code has been dispatched to ${createEmail}`);
       setResendTimer(60);
       setOtpDigits(['', '', '', '', '', '']);
       otpInputsRef.current[0]?.focus();
     } catch (err: any) {
-      setErrorMsg(err.message || 'Failed to resend code.');
+      setErrorMsg(err.message || 'Failed to resend verification code.');
     }
   };
+
+  // ==========================================
+  // CREATE ACCOUNT: Step 3 - Set Password & Store in DB
+  // ==========================================
+  const handleCreatePasswordSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPasswordTouched(true);
+    setErrorMsg(null);
+    setSuccessMsg(null);
+
+    if (!passwordValidation.isValid) {
+      setErrorMsg(passwordValidation.error || 'Password does not meet the security criteria.');
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      setErrorMsg('Passwords do not match. Please ensure both fields are identical.');
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      await createAccount({
+        email: createEmail,
+        fullName: fullName.trim(),
+        password,
+        code: otpDigits.join('')
+      });
+
+      setSuccessMsg('Account registered successfully! Redirecting to customs dashboard...');
+      setTimeout(() => {
+        navigate(from, { replace: true });
+      }, 600);
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Account registration failed. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // ==========================================
+  // LOGIN: Authenticate with registered credentials from DB
+  // ==========================================
+  const handleLoginSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoginEmailTouched(true);
+    setErrorMsg(null);
+    setSuccessMsg(null);
+
+    if (!isLoginEmailValid) {
+      setErrorMsg(loginEmailValidation.error || 'Please enter a valid email address.');
+      return;
+    }
+
+    if (!loginPassword) {
+      setErrorMsg('Please enter your account password.');
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      await login(loginEmail, loginPassword);
+      setSuccessMsg('Credentials verified! Accessing secure portal session...');
+      setTimeout(() => {
+        navigate(from, { replace: true });
+      }, 500);
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Login failed. Please verify your email and password.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const isLoading = isAuthLoading || isSubmitting;
 
   return (
     <div className="min-h-screen bg-navy-950 flex flex-col justify-center items-center p-6 relative overflow-hidden font-sans">
@@ -169,10 +288,10 @@ export const LoginPage: React.FC = () => {
       <div className="absolute -top-10 right-1/3 w-80 h-80 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
 
       {/* Main Container */}
-      <div className="w-full max-w-md z-10 space-y-6">
+      <div className="w-full max-w-md z-10 space-y-5">
         {/* Brand Header */}
-        <div className="text-center space-y-2">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-tr from-brand-600 via-indigo-500 to-sky-400 shadow-glow-primary mb-2">
+        <div className="text-center space-y-1.5">
+          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-tr from-brand-600 via-indigo-500 to-sky-400 shadow-glow-primary mb-1">
             <Ship className="w-7 h-7 text-white" />
           </div>
           <h2 className="text-2xl font-extrabold font-display tracking-tight text-white">
@@ -184,26 +303,65 @@ export const LoginPage: React.FC = () => {
         </div>
 
         {/* Auth Glass Card */}
-        <div className="glass-panel-glow p-8 rounded-3xl border border-slate-800 shadow-2xl backdrop-blur-2xl space-y-6">
-          {/* Card Title & Supabase Status Badge */}
-          <div className="flex items-center justify-between border-b border-slate-800 pb-4">
+        <div className="glass-panel-glow p-7 rounded-3xl border border-slate-800 shadow-2xl backdrop-blur-2xl space-y-5">
+          {/* Top Options Switcher: 1. Create account  2. Login */}
+          <div className="grid grid-cols-2 gap-1.5 p-1 rounded-2xl bg-slate-900/90 border border-slate-800">
+            <button
+              type="button"
+              onClick={() => handleSwitchMode('create')}
+              className={`py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                mode === 'create'
+                  ? 'bg-brand-600 text-white shadow-glow-primary'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+              }`}
+            >
+              <UserPlus className="w-3.5 h-3.5" />
+              <span>Create account</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleSwitchMode('login')}
+              className={`py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                mode === 'login'
+                  ? 'bg-brand-600 text-white shadow-glow-primary'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+              }`}
+            >
+              <LogIn className="w-3.5 h-3.5" />
+              <span>Login</span>
+            </button>
+          </div>
+
+          {/* Card Section Header */}
+          <div className="flex items-center justify-between border-b border-slate-800/80 pb-3">
             <div>
               <h3 className="text-sm font-bold text-slate-200">
-                {step === 'email' ? 'Strict Gmail Verification' : 'Enter Verification Code'}
+                {mode === 'create'
+                  ? createStep === 'email_name'
+                    ? 'Create Account'
+                    : createStep === 'otp'
+                    ? 'Enter Email OTP'
+                    : 'Set Account Password'
+                  : 'Account Login'}
               </h3>
               <p className="text-[11px] text-slate-400">
-                {step === 'email'
-                  ? 'Enter your verified @gmail.com account'
-                  : 'Enter the 6-digit code received in your Gmail inbox'}
+                {mode === 'create'
+                  ? createStep === 'email_name'
+                    ? 'Enter your name & valid email to receive your OTP'
+                    : createStep === 'otp'
+                    ? 'Enter the 6-digit code received in your email'
+                    : 'Create a secure password stored in the database'
+                  : 'Enter your registered email and password to log in'}
               </p>
             </div>
             <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-              Supabase Auth
+              Database Auth
             </span>
           </div>
 
-          {/* Feedback Messages */}
+          {/* Feedback Alerts */}
           {errorMsg && (
             <div className="p-3 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs flex items-start gap-2 animate-in fade-in">
               <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
@@ -218,26 +376,377 @@ export const LoginPage: React.FC = () => {
             </div>
           )}
 
-          {/* STEP 1: Enter Gmail & Name */}
-          {step === 'email' && (
-            <form onSubmit={handleRequestOtp} className="space-y-4">
-              {/* Email Input */}
+          {/* ========================================== */}
+          {/* OPTION 1: CREATE ACCOUNT FLOW              */}
+          {/* ========================================== */}
+          {mode === 'create' && (
+            <>
+              {/* STEP 1: Enter Name & Email */}
+              {createStep === 'email_name' && (
+                <form onSubmit={handleSendOtpSubmit} className="space-y-4">
+                  {/* Full Name Input */}
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                      Full Name <span className="text-rose-400">*</span>
+                    </label>
+                    <div className="relative">
+                      <User className="w-4 h-4 text-slate-500 absolute left-3.5 top-3" />
+                      <input
+                        type="text"
+                        required
+                        value={fullName}
+                        onChange={(e) => {
+                          setFullName(e.target.value);
+                          if (errorMsg) setErrorMsg(null);
+                        }}
+                        placeholder="e.g. Officer Rajesh Sharma"
+                        className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-slate-900/80 border border-slate-700/80 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition-colors"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Valid Email Section */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="block text-xs font-semibold text-slate-300">
+                        Email Address <span className="text-rose-400">*</span>
+                      </label>
+                      {/* Real-time Email Validity Indicator */}
+                      {createEmail.length > 0 && (
+                        <span
+                          className={`text-[10px] font-medium flex items-center gap-1 ${
+                            isCreateEmailValid ? 'text-emerald-400' : 'text-rose-400'
+                          }`}
+                        >
+                          {isCreateEmailValid ? (
+                            <>
+                              <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                              Valid Email
+                            </>
+                          ) : (
+                            <>
+                              <AlertCircle className="w-3 h-3 text-rose-400" />
+                              Invalid format
+                            </>
+                          )}
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="relative">
+                      <Mail
+                        className={`w-4 h-4 absolute left-3.5 top-3 transition-colors ${
+                          isCreateEmailValid
+                            ? 'text-emerald-400'
+                            : createEmailTouched && !isCreateEmailValid
+                            ? 'text-rose-400'
+                            : 'text-slate-500'
+                        }`}
+                      />
+                      <input
+                        type="email"
+                        required
+                        value={createEmail}
+                        onChange={(e) => {
+                          setCreateEmail(e.target.value);
+                          if (errorMsg) setErrorMsg(null);
+                        }}
+                        onBlur={() => setCreateEmailTouched(true)}
+                        placeholder="name@company.com or name@gmail.com"
+                        className={`w-full pl-10 pr-4 py-2.5 rounded-xl bg-slate-900/80 border text-xs text-white placeholder-slate-500 focus:outline-none transition-colors ${
+                          isCreateEmailValid
+                            ? 'border-emerald-500/60 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500'
+                            : createEmailTouched && createEmail.length > 0
+                            ? 'border-rose-500/60 focus:border-rose-500 focus:ring-1 focus:ring-rose-500'
+                            : 'border-slate-700/80 focus:border-brand-500 focus:ring-1 focus:ring-brand-500'
+                        }`}
+                      />
+                    </div>
+
+                    {createEmailTouched && !isCreateEmailValid && createEmail.length > 0 && (
+                      <p className="mt-1.5 text-[11px] text-rose-400 flex items-center gap-1 font-medium">
+                        <AlertCircle className="w-3 h-3 shrink-0" />
+                        {createEmailValidation.error || 'Please enter a valid, non-disposable email.'}
+                      </p>
+                    )}
+                    {!createEmailTouched && (
+                      <p className="mt-1.5 text-[11px] text-slate-500">
+                        An email containing your 6-digit OTP will be dispatched to verify your account.
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Submit Button */}
+                  <button
+                    type="submit"
+                    disabled={isLoading || !isCreateEmailValid || !fullName.trim()}
+                    className={`w-full py-2.5 rounded-xl text-white text-xs font-bold flex items-center justify-center gap-2 transition-all active:scale-[0.98] ${
+                      isCreateEmailValid && fullName.trim()
+                        ? 'bg-brand-600 hover:bg-brand-500 shadow-glow-primary cursor-pointer'
+                        : 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700'
+                    }`}
+                  >
+                    {isLoading ? (
+                      <>
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                        <span>Sending OTP to Email...</span>
+                      </>
+                    ) : (
+                      <>
+                        <KeyRound className="w-3.5 h-3.5" />
+                        <span>Send Verification OTP</span>
+                        <ArrowRight className="w-3.5 h-3.5" />
+                      </>
+                    )}
+                  </button>
+                </form>
+              )}
+
+              {/* STEP 2: Enter 6-Digit OTP */}
+              {createStep === 'otp' && (
+                <form onSubmit={handleVerifyOtpSubmit} className="space-y-4">
+                  {/* Email badge with back option */}
+                  <div className="flex items-center justify-between text-xs bg-slate-900/60 p-2.5 rounded-xl border border-slate-800">
+                    <div className="flex items-center gap-2 text-slate-300 truncate">
+                      <Mail className="w-3.5 h-3.5 text-brand-400 shrink-0" />
+                      <span className="truncate font-mono text-[11px]">{createEmail}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCreateStep('email_name');
+                        setErrorMsg(null);
+                      }}
+                      className="text-[11px] text-brand-400 hover:text-brand-300 font-semibold flex items-center gap-1 shrink-0 ml-2 cursor-pointer"
+                    >
+                      <ArrowLeft className="w-3 h-3" />
+                      Edit
+                    </button>
+                  </div>
+
+                  {/* Instruction banner */}
+                  <div className="p-3.5 rounded-xl bg-slate-900/90 border border-brand-500/30 text-slate-200 text-xs space-y-1.5">
+                    <div className="flex items-center gap-2 text-brand-300 font-bold text-xs">
+                      <Inbox className="w-4 h-4 text-brand-400" />
+                      <span>Check Your Email Inbox</span>
+                    </div>
+                    <p className="text-[11px] text-slate-300 leading-relaxed">
+                      We have dispatched a 6-digit one-time passcode (OTP) to <strong className="text-white">{createEmail}</strong>. Please check your inbox or Spam folder.
+                    </p>
+                    <div className="flex items-center gap-1.5 text-[10px] text-amber-400 font-medium pt-0.5">
+                      <Lock className="w-3 h-3 shrink-0" />
+                      <span>OTP expires in 5 minutes &bull; Maximum 3 attempts</span>
+                    </div>
+                  </div>
+
+                  {/* 6 Digit Inputs */}
+                  <div className="space-y-2">
+                    <label className="block text-xs font-semibold text-slate-300 text-center">
+                      Enter 6-Digit Verification Code
+                    </label>
+                    <div className="flex justify-between gap-2">
+                      {otpDigits.map((digit, idx) => (
+                        <input
+                          key={idx}
+                          ref={(el) => { otpInputsRef.current[idx] = el; }}
+                          type="text"
+                          maxLength={1}
+                          inputMode="numeric"
+                          pattern="[0-9]*"
+                          value={digit}
+                          onChange={(e) => handleDigitChange(idx, e.target.value)}
+                          onKeyDown={(e) => handleKeyDown(idx, e)}
+                          className="w-12 h-12 text-center text-lg font-bold font-mono rounded-xl bg-slate-900/90 border border-slate-700 text-white focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/50 transition-all shadow-inner"
+                        />
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Verify Code Button */}
+                  <button
+                    type="submit"
+                    disabled={isLoading || otpDigits.join('').length !== 6}
+                    className={`w-full py-2.5 rounded-xl text-white text-xs font-bold flex items-center justify-center gap-2 transition-all active:scale-[0.98] ${
+                      otpDigits.join('').length === 6
+                        ? 'bg-emerald-600 hover:bg-emerald-500 shadow-glow-primary cursor-pointer'
+                        : 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700'
+                    }`}
+                  >
+                    {isLoading ? (
+                      <>
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                        <span>Verifying Security Code...</span>
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        <span>Verify OTP &amp; Continue</span>
+                        <ArrowRight className="w-3.5 h-3.5" />
+                      </>
+                    )}
+                  </button>
+
+                  {/* Resend OTP */}
+                  <div className="text-center pt-1">
+                    {resendTimer > 0 ? (
+                      <span className="text-[11px] text-slate-400">
+                        Resend code in <span className="font-mono text-brand-400 font-bold">{resendTimer}s</span>
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={handleResendOtp}
+                        className="text-[11px] text-brand-400 hover:text-brand-300 font-semibold underline underline-offset-2 cursor-pointer"
+                      >
+                        Didn&apos;t receive the code? Resend OTP
+                      </button>
+                    )}
+                  </div>
+                </form>
+              )}
+
+              {/* STEP 3: Create Password & Store in Database */}
+              {createStep === 'password' && (
+                <form onSubmit={handleCreatePasswordSubmit} className="space-y-4">
+                  <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <span>Email verified! Create your account password for DocuSetu.</span>
+                  </div>
+
+                  {/* Password Input */}
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                      Create Password <span className="text-rose-400">*</span>
+                    </label>
+                    <div className="relative">
+                      <Lock className="w-4 h-4 text-slate-500 absolute left-3.5 top-3" />
+                      <input
+                        type={showPassword ? 'text' : 'password'}
+                        required
+                        value={password}
+                        onChange={(e) => {
+                          setPassword(e.target.value);
+                          if (errorMsg) setErrorMsg(null);
+                        }}
+                        onBlur={() => setPasswordTouched(true)}
+                        placeholder="At least 8 characters"
+                        className="w-full pl-10 pr-10 py-2.5 rounded-xl bg-slate-900/80 border border-slate-700/80 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition-colors"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute right-3.5 top-3 text-slate-500 hover:text-slate-300 cursor-pointer"
+                      >
+                        {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Confirm Password Input */}
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                      Confirm Password <span className="text-rose-400">*</span>
+                    </label>
+                    <div className="relative">
+                      <Lock className="w-4 h-4 text-slate-500 absolute left-3.5 top-3" />
+                      <input
+                        type={showConfirmPassword ? 'text' : 'password'}
+                        required
+                        value={confirmPassword}
+                        onChange={(e) => {
+                          setConfirmPassword(e.target.value);
+                          if (errorMsg) setErrorMsg(null);
+                        }}
+                        placeholder="Re-enter password"
+                        className={`w-full pl-10 pr-10 py-2.5 rounded-xl bg-slate-900/80 border text-xs text-white placeholder-slate-500 focus:outline-none transition-colors ${
+                          confirmPassword && doPasswordsMatch
+                            ? 'border-emerald-500/60 focus:border-emerald-500'
+                            : confirmPassword && !doPasswordsMatch
+                            ? 'border-rose-500/60 focus:border-rose-500'
+                            : 'border-slate-700/80 focus:border-brand-500'
+                        }`}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                        className="absolute right-3.5 top-3 text-slate-500 hover:text-slate-300 cursor-pointer"
+                      >
+                        {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Password Strength Checklist */}
+                  <div className="p-3 rounded-xl bg-slate-900/80 border border-slate-800 text-[11px] space-y-1.5">
+                    <div className="text-slate-400 font-semibold mb-1">Password Requirements:</div>
+                    <div className="grid grid-cols-2 gap-1.5">
+                      <div className={`flex items-center gap-1.5 ${passwordValidation.hasMinLength ? 'text-emerald-400' : 'text-slate-500'}`}>
+                        <Check className="w-3 h-3" />
+                        <span>8+ Characters</span>
+                      </div>
+                      <div className={`flex items-center gap-1.5 ${passwordValidation.hasUppercase ? 'text-emerald-400' : 'text-slate-500'}`}>
+                        <Check className="w-3 h-3" />
+                        <span>Uppercase (A-Z)</span>
+                      </div>
+                      <div className={`flex items-center gap-1.5 ${passwordValidation.hasLowercase ? 'text-emerald-400' : 'text-slate-500'}`}>
+                        <Check className="w-3 h-3" />
+                        <span>Lowercase (a-z)</span>
+                      </div>
+                      <div className={`flex items-center gap-1.5 ${passwordValidation.hasNumberOrSpecial ? 'text-emerald-400' : 'text-slate-500'}`}>
+                        <Check className="w-3 h-3" />
+                        <span>Number / Symbol</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Complete Registration Button */}
+                  <button
+                    type="submit"
+                    disabled={isLoading || !passwordValidation.isValid || !doPasswordsMatch}
+                    className={`w-full py-2.5 rounded-xl text-white text-xs font-bold flex items-center justify-center gap-2 transition-all active:scale-[0.98] ${
+                      passwordValidation.isValid && doPasswordsMatch
+                        ? 'bg-brand-600 hover:bg-brand-500 shadow-glow-primary cursor-pointer'
+                        : 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700'
+                    }`}
+                  >
+                    {isLoading ? (
+                      <>
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                        <span>Saving Account in Database...</span>
+                      </>
+                    ) : (
+                      <>
+                        <ShieldCheck className="w-3.5 h-3.5" />
+                        <span>Create Account &amp; Access Dashboard</span>
+                      </>
+                    )}
+                  </button>
+                </form>
+              )}
+            </>
+          )}
+
+          {/* ========================================== */}
+          {/* OPTION 2: LOGIN FLOW                       */}
+          {/* ========================================== */}
+          {mode === 'login' && (
+            <form onSubmit={handleLoginSubmit} className="space-y-4">
+              {/* Registered Email */}
               <div>
                 <div className="flex items-center justify-between mb-1.5">
                   <label className="block text-xs font-semibold text-slate-300">
-                    Google / Gmail Address <span className="text-rose-400">*</span>
+                    Registered Email <span className="text-rose-400">*</span>
                   </label>
-                  {/* Real-time Gmail status badge */}
-                  {email.length > 0 && (
+                  {loginEmail.length > 0 && (
                     <span
                       className={`text-[10px] font-medium flex items-center gap-1 ${
-                        isGmailValid ? 'text-emerald-400' : 'text-rose-400'
+                        isLoginEmailValid ? 'text-emerald-400' : 'text-rose-400'
                       }`}
                     >
-                      {isGmailValid ? (
+                      {isLoginEmailValid ? (
                         <>
                           <CheckCircle2 className="w-3 h-3 text-emerald-400" />
-                          Verified @gmail.com
+                          Valid Email
                         </>
                       ) : (
                         <>
@@ -252,9 +761,9 @@ export const LoginPage: React.FC = () => {
                 <div className="relative">
                   <Mail
                     className={`w-4 h-4 absolute left-3.5 top-3 transition-colors ${
-                      isGmailValid
+                      isLoginEmailValid
                         ? 'text-emerald-400'
-                        : emailTouched && !isGmailValid
+                        : loginEmailTouched && !isLoginEmailValid
                         ? 'text-rose-400'
                         : 'text-slate-500'
                     }`}
@@ -262,60 +771,52 @@ export const LoginPage: React.FC = () => {
                   <input
                     type="email"
                     required
-                    value={email}
+                    value={loginEmail}
                     onChange={(e) => {
-                      setEmail(e.target.value);
+                      setLoginEmail(e.target.value);
                       if (errorMsg) setErrorMsg(null);
                     }}
-                    onBlur={() => setEmailTouched(true)}
-                    placeholder="yourname@gmail.com"
-                    className={`w-full pl-10 pr-4 py-2.5 rounded-xl bg-slate-900/80 border text-xs text-white placeholder-slate-500 focus:outline-none transition-colors ${
-                      isGmailValid
-                        ? 'border-emerald-500/60 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500'
-                        : emailTouched && email.length > 0
-                        ? 'border-rose-500/60 focus:border-rose-500 focus:ring-1 focus:ring-rose-500'
-                        : 'border-slate-700/80 focus:border-brand-500 focus:ring-1 focus:ring-brand-500'
-                    }`}
-                  />
-                </div>
-
-                {/* Validation helper hint */}
-                {emailTouched && !isGmailValid && email.length > 0 && (
-                  <p className="mt-1.5 text-[11px] text-rose-400 flex items-center gap-1 font-medium">
-                    <AlertCircle className="w-3 h-3 shrink-0" />
-                    {validationResult.error || 'Only genuine @gmail.com addresses can be verified.'}
-                  </p>
-                )}
-                {!emailTouched && (
-                  <p className="mt-1.5 text-[11px] text-slate-500">
-                    A strictly verified 6-digit OTP will be dispatched to your Gmail inbox.
-                  </p>
-                )}
-              </div>
-
-              {/* Full Name / Officer Designation */}
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                  Full Name / Officer Designation <span className="text-slate-500 text-[10px]">(Stored in Supabase)</span>
-                </label>
-                <div className="relative">
-                  <User className="w-4 h-4 text-slate-500 absolute left-3.5 top-3" />
-                  <input
-                    type="text"
-                    value={fullName}
-                    onChange={(e) => setFullName(e.target.value)}
-                    placeholder="e.g. Capt. Rajesh Sharma"
+                    onBlur={() => setLoginEmailTouched(true)}
+                    placeholder="Enter your registered email"
                     className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-slate-900/80 border border-slate-700/80 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition-colors"
                   />
+                </div>
+              </div>
+
+              {/* Password */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                  Password <span className="text-rose-400">*</span>
+                </label>
+                <div className="relative">
+                  <Lock className="w-4 h-4 text-slate-500 absolute left-3.5 top-3" />
+                  <input
+                    type={showLoginPassword ? 'text' : 'password'}
+                    required
+                    value={loginPassword}
+                    onChange={(e) => {
+                      setLoginPassword(e.target.value);
+                      if (errorMsg) setErrorMsg(null);
+                    }}
+                    placeholder="Enter your password"
+                    className="w-full pl-10 pr-10 py-2.5 rounded-xl bg-slate-900/80 border border-slate-700/80 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition-colors"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowLoginPassword(!showLoginPassword)}
+                    className="absolute right-3.5 top-3 text-slate-500 hover:text-slate-300 cursor-pointer"
+                  >
+                    {showLoginPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
                 </div>
               </div>
 
               {/* Submit Button */}
               <button
                 type="submit"
-                disabled={isLoading || !isGmailValid}
+                disabled={isLoading || !isLoginEmailValid || !loginPassword}
                 className={`w-full py-2.5 rounded-xl text-white text-xs font-bold flex items-center justify-center gap-2 transition-all active:scale-[0.98] ${
-                  isGmailValid
+                  isLoginEmailValid && loginPassword
                     ? 'bg-brand-600 hover:bg-brand-500 shadow-glow-primary cursor-pointer'
                     : 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700'
                 }`}
@@ -323,12 +824,12 @@ export const LoginPage: React.FC = () => {
                 {isLoading ? (
                   <>
                     <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                    <span>Dispatching Verification Code to Gmail...</span>
+                    <span>Verifying Credentials with Database...</span>
                   </>
                 ) : (
                   <>
                     <KeyRound className="w-3.5 h-3.5" />
-                    <span>Send Verification Code to Gmail</span>
+                    <span>Sign In to Account</span>
                     <ArrowRight className="w-3.5 h-3.5" />
                   </>
                 )}
@@ -336,127 +837,31 @@ export const LoginPage: React.FC = () => {
             </form>
           )}
 
-          {/* STEP 2: Verify 6-Digit OTP */}
-          {step === 'otp' && (
-            <form onSubmit={handleVerifyOtpSubmit} className="space-y-5">
-              {/* Back to Email toggle */}
-              <div className="flex items-center justify-between text-xs bg-slate-900/60 p-2.5 rounded-xl border border-slate-800">
-                <div className="flex items-center gap-2 text-slate-300 truncate">
-                  <Mail className="w-3.5 h-3.5 text-brand-400 shrink-0" />
-                  <span className="truncate font-mono text-[11px]">{email}</span>
-                </div>
+          {/* Toggle Helper Link */}
+          <div className="pt-2 text-center border-t border-slate-800/80">
+            {mode === 'create' ? (
+              <p className="text-xs text-slate-400">
+                Already registered?{' '}
                 <button
                   type="button"
-                  onClick={() => {
-                    setStep('email');
-                    setErrorMsg(null);
-                  }}
-                  className="text-[11px] text-brand-400 hover:text-brand-300 font-semibold flex items-center gap-1 shrink-0 ml-2 cursor-pointer"
+                  onClick={() => handleSwitchMode('login')}
+                  className="text-brand-400 hover:text-brand-300 font-semibold underline underline-offset-2 cursor-pointer ml-1"
                 >
-                  <ArrowLeft className="w-3 h-3" />
-                  Edit
+                  Login to your account
                 </button>
-              </div>
-
-              {/* Instructions banner directing user to check their real Gmail inbox */}
-              <div className="p-3.5 rounded-xl bg-slate-900/90 border border-brand-500/30 text-slate-200 text-xs space-y-2">
-                <div className="flex items-center gap-2 text-brand-300 font-bold text-xs">
-                  <Inbox className="w-4 h-4 text-brand-400" />
-                  <span>Check Your Gmail Inbox</span>
-                </div>
-                <p className="text-[11px] text-slate-300 leading-relaxed">
-                  We have dispatched your 6-digit one-time passcode to <strong className="text-white">{email}</strong>. Please check your inbox or Spam/Junk folder.
-                </p>
-                <div className="flex items-center gap-1.5 text-[10px] text-amber-400 font-medium pt-1">
-                  <Lock className="w-3 h-3 shrink-0" />
-                  <span>Code expires in 5 minutes &bull; Maximum 3 attempts</span>
-                </div>
-              </div>
-
-              {/* 6-Digit Input Boxes */}
-              <div className="space-y-2">
-                <label className="block text-xs font-semibold text-slate-300 text-center">
-                  Enter 6-Digit Code
-                </label>
-                <div className="flex justify-between gap-2">
-                  {otpDigits.map((digit, idx) => (
-                    <input
-                      key={idx}
-                      ref={(el) => { otpInputsRef.current[idx] = el; }}
-                      type="text"
-                      maxLength={1}
-                      inputMode="numeric"
-                      pattern="[0-9]*"
-                      value={digit}
-                      onChange={(e) => handleDigitChange(idx, e.target.value)}
-                      onKeyDown={(e) => handleKeyDown(idx, e)}
-                      className="w-12 h-12 text-center text-lg font-bold font-mono rounded-xl bg-slate-900/90 border border-slate-700 text-white focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/50 transition-all shadow-inner"
-                    />
-                  ))}
-                </div>
-              </div>
-
-              {/* Verify & Login Button */}
-              <button
-                type="submit"
-                disabled={isLoading || otpDigits.join('').length !== 6}
-                className={`w-full py-2.5 rounded-xl text-white text-xs font-bold flex items-center justify-center gap-2 transition-all active:scale-[0.98] ${
-                  otpDigits.join('').length === 6
-                    ? 'bg-emerald-600 hover:bg-emerald-500 shadow-glow-primary cursor-pointer'
-                    : 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700'
-                }`}
-              >
-                {isLoading ? (
-                  <>
-                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                    <span>Verifying Code &amp; Syncing with Supabase...</span>
-                  </>
-                ) : (
-                  <>
-                    <CheckCircle2 className="w-3.5 h-3.5" />
-                    <span>Verify Code &amp; Access Dashboard</span>
-                  </>
-                )}
-              </button>
-
-              {/* Resend Timer */}
-              <div className="text-center pt-1">
-                {resendTimer > 0 ? (
-                  <span className="text-[11px] text-slate-400">
-                    Resend code in <span className="font-mono text-brand-400 font-bold">{resendTimer}s</span>
-                  </span>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={handleResend}
-                    className="text-[11px] text-brand-400 hover:text-brand-300 font-semibold underline underline-offset-2 cursor-pointer"
-                  >
-                    Didn&apos;t receive the code? Resend OTP
-                  </button>
-                )}
-              </div>
-            </form>
-          )}
-
-          {/* Quick Demo Login Option for testing */}
-          <div className="pt-2 border-t border-slate-800 space-y-3">
-            <div className="flex items-center gap-2 text-center text-xs text-slate-400">
-              <span className="h-px bg-slate-800 flex-1" />
-              <span>Developer Evaluation</span>
-              <span className="h-px bg-slate-800 flex-1" />
-            </div>
-
-            <button
-              onClick={() => {
-                loginAsDemo();
-                navigate(from, { replace: true });
-              }}
-              type="button"
-              className="w-full py-2 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700/80 text-slate-300 text-xs font-medium flex items-center justify-center gap-2 transition-all cursor-pointer"
-            >
-              <Sparkles className="w-3.5 h-3.5 text-brand-400" />
-              <span>Instant Test Demo Access (Apex Global Brokerage)</span>
-            </button>
+              </p>
+            ) : (
+              <p className="text-xs text-slate-400">
+                Don&apos;t have an account yet?{' '}
+                <button
+                  type="button"
+                  onClick={() => handleSwitchMode('create')}
+                  className="text-brand-400 hover:text-brand-300 font-semibold underline underline-offset-2 cursor-pointer ml-1"
+                >
+                  Create an account
+                </button>
+              </p>
+            )}
           </div>
         </div>
 
@@ -469,7 +874,7 @@ export const LoginPage: React.FC = () => {
           <span>•</span>
           <div className="flex items-center gap-1.5">
             <Building2 className="w-3.5 h-3.5 text-brand-400" />
-            <span>Encrypted Supabase Storage</span>
+            <span>Encrypted Database Storage</span>
           </div>
         </div>
       </div>

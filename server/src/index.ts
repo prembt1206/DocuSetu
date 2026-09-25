@@ -77,12 +77,18 @@ app.use('/api/v1', apiRouter);
 // Error Handling Middleware
 app.use(errorHandler);
 
-// Start Server
-app.listen(PORT, () => {
-  logger.info(`=======================================================`);
-  logger.info(`🛡️ DocuSetu Enterprise IDP Server running on port ${PORT}`);
-  logger.info(`🌐 Health check: http://localhost:${PORT}/health`);
-  logger.info(`📦 API Base URL: http://localhost:${PORT}/api/v1`);
-  logger.info(`🔒 Security: Helmet, RateLimiter, Anti-BruteForce OTP Active`);
-  logger.info(`=======================================================`);
-});
+// Start Server if not in serverless runtime
+if (process.env.VERCEL !== '1') {
+  app.listen(PORT, () => {
+    logger.info(`=======================================================`);
+    logger.info(`🛡️ DocuSetu Enterprise IDP Server running on port ${PORT}`);
+    logger.info(`🌐 Health check: http://localhost:${PORT}/health`);
+    logger.info(`📦 API Base URL: http://localhost:${PORT}/api/v1`);
+    logger.info(`🔒 Security: Helmet, RateLimiter, Anti-BruteForce OTP Active`);
+    logger.info(`=======================================================`);
+  });
+}
+
+export default app;
+export { app };
+

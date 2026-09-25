@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { supabase, isMockSupabase } from '../lib/supabase.js';
 import { api } from '../lib/api.js';
-import { validateGmail, GmailValidationResult } from '@shared/validations.js';
+import { validateEmail, EmailValidationResult, validatePassword } from '@shared/validations.js';
 
 export interface UserProfile {
   id: string;
@@ -17,24 +17,16 @@ interface AuthContextType {
   token: string | null;
   isLoading: boolean;
   isAuthenticated: boolean;
-  validateGmail: (email: string) => GmailValidationResult;
-  sendOtp: (email: string) => Promise<{ message: string; expiresInSeconds?: number }>;
-  verifyOtp: (email: string, code: string, fullName?: string) => Promise<UserProfile>;
-  login: (email: string, password?: string) => Promise<void>;
-  loginAsDemo: () => void;
+  validateEmail: (email: string) => EmailValidationResult;
+  validateGmail: (email: string) => EmailValidationResult;
+  sendOtp: (email: string, fullName?: string) => Promise<{ message: string; expiresInSeconds?: number }>;
+  verifyOtp: (email: string, code: string) => Promise<{ verified: boolean; message: string }>;
+  createAccount: (params: { email: string; fullName: string; password: string; code?: string }) => Promise<UserProfile>;
+  login: (email: string, password: string) => Promise<UserProfile>;
   logout: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
-
-const DEMO_USER: UserProfile = {
-  id: '00000000-0000-4000-8000-000000000001',
-  email: 'broker@docusetu.io',
-  organizationId: '11111111-1111-4111-8111-111111111111',
-  organizationName: 'Apex Global Freight & Customs Brokerage',
-  role: 'Senior Customs Broker & Compliance Officer',
-  fullName: 'Apex Lead Customs Broker'
-};
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<UserProfile | null>(null);
@@ -48,8 +40,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     if (savedUser && savedToken) {
       try {
-        setUser(JSON.parse(savedUser));
-        setToken(savedToken);
+        const parsed = JSON.parse(savedUser);
+        // Ensure user is not an old legacy demo user
+        if (parsed.email === 'broker@docusetu.io' && parsed.id === '00000000-0000-4000-8000-000000000001') {
+          localStorage.removeItem('docusetu_user');
+          localStorage.removeItem('docusetu_auth_token');
+          setUser(null);
+          setToken(null);
+        } else {
+          setUser(parsed);
+          setToken(savedToken);
+        }
       } catch {
         localStorage.removeItem('docusetu_user');
         localStorage.removeItem('docusetu_auth_token');
@@ -57,7 +58,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setToken(null);
       }
     } else {
-      // STRICT SECURITY: Do NOT auto-authenticate! User MUST explicitly verify their Gmail
       setUser(null);
       setToken(null);
     }
@@ -83,14 +83,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   /**
-   * Request OTP code for a strictly verified Gmail address
+   * Request 6-digit OTP code for a valid email address
    */
-  const sendOtp = async (email: string) => {
+  const sendOtp = async (email: string, fullName?: string) => {
     setIsLoading(true);
     try {
-      const validation = validateGmail(email);
+      const validation = validateEmail(email);
       if (!validation.isValid) {
-        throw new Error(validation.error || 'Please provide a valid @gmail.com address.');
+        throw new Error(validation.error || 'Please provide a valid email address.');
       }
 
       // If remote Supabase is configured, trigger Supabase Auth OTP in parallel
@@ -105,8 +105,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       }
 
-      // Invoke server API for real email dispatch via SMTP / EmailService
-      const res = await api.sendOtp(validation.normalizedEmail!);
+      // Dispatch real email via API
+      const res = await api.sendOtp(validation.normalizedEmail!, fullName);
       return res;
     } finally {
       setIsLoading(false);
@@ -114,20 +114,69 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   /**
-   * Strictly verify the 6-digit OTP received in Gmail and store user profile in Supabase
+   * Strictly verify the 6-digit OTP received in email
    */
-  const verifyOtp = async (email: string, code: string, fullName?: string): Promise<UserProfile> => {
+  const verifyOtp = async (email: string, code: string): Promise<{ verified: boolean; message: string }> => {
     setIsLoading(true);
     try {
-      const validation = validateGmail(email);
+      const validation = validateEmail(email);
       if (!validation.isValid) {
-        throw new Error(validation.error || 'Please provide a valid @gmail.com address.');
+        throw new Error(validation.error || 'Please provide a valid email address.');
+      }
+
+      const normalizedEmail = validation.normalizedEmail!;
+      const res = await api.verifyOtp(normalizedEmail, code);
+      return res;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  /**
+   * Complete account creation: save password & details in database
+   */
+  const createAccount = async (params: {
+    email: string;
+    fullName: string;
+    password: string;
+    code?: string;
+  }): Promise<UserProfile> => {
+    setIsLoading(true);
+    try {
+      const validation = validateEmail(params.email);
+      if (!validation.isValid) {
+        throw new Error(validation.error || 'Please provide a valid email address.');
+      }
+
+      const passVal = validatePassword(params.password);
+      if (!passVal.isValid) {
+        throw new Error(passVal.error || 'Password does not meet security requirements.');
       }
 
       const normalizedEmail = validation.normalizedEmail!;
 
-      // 1. Verify OTP with backend (timing-safe, SHA-256 hashed check)
-      const res = await api.verifyOtp(normalizedEmail, code, undefined, fullName);
+      // If remote Supabase is connected, register user in Supabase Auth
+      if (!isMockSupabase) {
+        try {
+          await supabase.auth.signUp({
+            email: normalizedEmail,
+            password: params.password,
+            options: {
+              data: { full_name: params.fullName.trim() }
+            }
+          });
+        } catch (supaErr: any) {
+          console.warn('Supabase signUp note:', supaErr.message);
+        }
+      }
+
+      // Create account in database via API
+      const res = await api.createAccount({
+        email: normalizedEmail,
+        fullName: params.fullName.trim(),
+        password: params.password,
+        code: params.code
+      });
 
       const profile: UserProfile = {
         id: res.user.id,
@@ -135,37 +184,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         organizationId: res.user.organizationId || '11111111-1111-4111-8111-111111111111',
         organizationName: res.user.organizationName || 'Apex Global Freight & Customs Brokerage',
         role: res.user.role || 'Customs Broker & Compliance Officer',
-        fullName: fullName || res.user.fullName || normalizedEmail.split('@')[0].replace(/[._]/g, ' ')
+        fullName: res.user.fullName || params.fullName.trim()
       };
 
-      // 2. Persist in remote Supabase `users` table if configured
-      if (!isMockSupabase) {
-        try {
-          const { error: supaError } = await supabase.from('users').upsert({
-            id: profile.id,
-            email: profile.email,
-            organization_id: profile.organizationId,
-            role: profile.role,
-            full_name: profile.fullName
-          });
-          if (supaError) {
-            console.warn('Supabase DB users upsert note:', supaError.message);
-          }
-        } catch (dbErr) {
-          console.warn('Direct Supabase write error:', dbErr);
-        }
-      }
-
-      // 3. Sync to backend database store
-      await api.syncUser({
-        id: profile.id,
-        email: profile.email,
-        organizationId: profile.organizationId,
-        role: profile.role,
-        fullName: profile.fullName
-      });
-
-      // 4. Update session
+      // Set active session
       setUser(profile);
       setToken(res.token);
 
@@ -178,40 +200,72 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const login = async (email: string, password?: string) => {
+  /**
+   * Log in user with registered email and password checked against database
+   */
+  const login = async (email: string, password: string): Promise<UserProfile> => {
     setIsLoading(true);
     try {
-      if (!isMockSupabase && password) {
-        const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-        if (error) throw error;
-        if (data.session) {
-          const profile: UserProfile = {
-            id: data.user.id,
-            email: data.user.email || email,
-            organizationId: '11111111-1111-4111-8111-111111111111',
-            organizationName: 'Apex Global Freight & Customs Brokerage',
-            role: 'Customs Broker',
-            fullName: data.user.user_metadata?.full_name || email.split('@')[0]
-          };
-          setUser(profile);
-          setToken(data.session.access_token);
-          localStorage.setItem('docusetu_user', JSON.stringify(profile));
-          localStorage.setItem('docusetu_auth_token', data.session.access_token);
-          return;
+      const validation = validateEmail(email);
+      if (!validation.isValid) {
+        throw new Error(validation.error || 'Please enter a valid registered email address.');
+      }
+
+      if (!password || password.trim().length === 0) {
+        throw new Error('Please enter your password.');
+      }
+
+      const normalizedEmail = validation.normalizedEmail!;
+
+      // If remote Supabase is configured, try Supabase Auth sign in
+      if (!isMockSupabase) {
+        try {
+          const { data, error } = await supabase.auth.signInWithPassword({
+            email: normalizedEmail,
+            password
+          });
+          if (!error && data?.session) {
+            const profile: UserProfile = {
+              id: data.user.id,
+              email: data.user.email || normalizedEmail,
+              organizationId: '11111111-1111-4111-8111-111111111111',
+              organizationName: 'Apex Global Freight & Customs Brokerage',
+              role: 'Customs Officer',
+              fullName: data.user.user_metadata?.full_name || normalizedEmail.split('@')[0]
+            };
+            setUser(profile);
+            setToken(data.session.access_token);
+            localStorage.setItem('docusetu_user', JSON.stringify(profile));
+            localStorage.setItem('docusetu_auth_token', data.session.access_token);
+            return profile;
+          }
+        } catch (supaErr: any) {
+          console.warn('Supabase signInWithPassword note:', supaErr.message);
         }
       }
 
-      throw new Error('Please use OTP verification to log in with your Gmail.');
+      // Check registered credentials against backend database
+      const res = await api.login({ email: normalizedEmail, password });
+
+      const profile: UserProfile = {
+        id: res.user.id,
+        email: normalizedEmail,
+        organizationId: res.user.organizationId || '11111111-1111-4111-8111-111111111111',
+        organizationName: res.user.organizationName || 'Apex Global Freight & Customs Brokerage',
+        role: res.user.role || 'Customs Broker & Compliance Officer',
+        fullName: res.user.fullName || normalizedEmail.split('@')[0]
+      };
+
+      setUser(profile);
+      setToken(res.token);
+
+      localStorage.setItem('docusetu_user', JSON.stringify(profile));
+      localStorage.setItem('docusetu_auth_token', res.token);
+
+      return profile;
     } finally {
       setIsLoading(false);
     }
-  };
-
-  const loginAsDemo = () => {
-    setUser(DEMO_USER);
-    setToken('mock-token-docusetu-enterprise');
-    localStorage.setItem('docusetu_user', JSON.stringify(DEMO_USER));
-    localStorage.setItem('docusetu_auth_token', 'mock-token-docusetu-enterprise');
   };
 
   const logout = () => {
@@ -231,11 +285,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         token,
         isLoading,
         isAuthenticated: !!user,
-        validateGmail,
+        validateEmail,
+        validateGmail: validateEmail,
         sendOtp,
         verifyOtp,
+        createAccount,
         login,
-        loginAsDemo,
         logout
       }}
     >

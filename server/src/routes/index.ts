@@ -14,7 +14,13 @@ import {
 } from '../controllers/shipmentController.js';
 import { handleGetSettings, handleUpdateSettings } from '../controllers/settingsController.js';
 import { handleGetDashboardInsights } from '../controllers/insightsController.js';
-import { handleSendOtp, handleVerifyOtp, handleSyncUser } from '../controllers/authController.js';
+import {
+  handleSendOtp,
+  handleVerifyOtp,
+  handleCreateAccount,
+  handleLogin,
+  handleSyncUser
+} from '../controllers/authController.js';
 import { otpSendLimiter, otpVerifyLimiter } from '../middlewares/rateLimitMiddleware.js';
 
 const router = Router();
@@ -24,6 +30,8 @@ const router = Router();
 // ==========================================
 router.post('/auth/otp/send', otpSendLimiter, handleSendOtp);
 router.post('/auth/otp/verify', otpVerifyLimiter, handleVerifyOtp);
+router.post('/auth/register', handleCreateAccount);
+router.post('/auth/login', handleLogin);
 router.post('/auth/user', handleSyncUser);
 
 // Apply Auth Middleware to all protected API v1 routes

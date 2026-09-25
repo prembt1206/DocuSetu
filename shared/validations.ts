@@ -197,68 +197,92 @@ export type CreateShipmentInput = z.infer<typeof CreateShipmentSchema>;
 // ==========================================
 // Gmail Validation & Auth Schemas
 // ==========================================
-export interface GmailValidationResult {
+export interface EmailValidationResult {
   isValid: boolean;
   error?: string;
   normalizedEmail?: string;
 }
 
+export type GmailValidationResult = EmailValidationResult;
+
+// Disposable temporary email domains that should be rejected for maximum security
+const DISPOSABLE_EMAIL_DOMAINS = new Set([
+  'mailinator.com',
+  '10minutemail.com',
+  'tempmail.com',
+  'guerrillamail.com',
+  'yopmail.com',
+  'trashmail.com',
+  'getairmail.com',
+  'sharklasers.com',
+  'throwawaymail.com',
+  'dispostable.com',
+  'guerrillamailblock.com',
+  'fakemailgenerator.com'
+]);
+
 /**
- * Strict Gmail validation:
- * Validates email format, verifies domain is exactly gmail.com,
- * and checks username constraints (length, allowed characters, dot rules).
+ * Enterprise-grade Email Validator:
+ * Validates RFC-compliant email syntax, verifies domain structure,
+ * and blocks temporary disposable mail services for maximum security.
  */
-export function validateGmail(email: string): GmailValidationResult {
+export function validateEmail(email: string): EmailValidationResult {
   if (!email || typeof email !== 'string') {
     return { isValid: false, error: 'Email address cannot be empty.' };
   }
 
   const trimmed = email.trim().toLowerCase();
 
-  // Basic structure check
-  if (!trimmed.includes('@')) {
-    return { isValid: false, error: 'Email must contain an @ symbol.' };
+  if (trimmed.length < 5) {
+    return { isValid: false, error: 'Email address is too short.' };
+  }
+
+  if (trimmed.length > 254) {
+    return { isValid: false, error: 'Email address exceeds maximum length of 254 characters.' };
+  }
+
+  // Standard RFC 5322 compliant regex for modern emails
+  const rfcEmailRegex = /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+$/;
+  if (!rfcEmailRegex.test(trimmed)) {
+    return { isValid: false, error: 'Please enter a valid email address (e.g. name@domain.com).' };
   }
 
   const parts = trimmed.split('@');
   if (parts.length !== 2) {
-    return { isValid: false, error: 'Email format is invalid (multiple @ symbols).' };
+    return { isValid: false, error: 'Email must contain exactly one "@" symbol.' };
   }
 
   const [username, domain] = parts;
 
-  // Domain verification: must be gmail.com or googlemail.com
-  if (domain !== 'gmail.com' && domain !== 'googlemail.com') {
-    return {
-      isValid: false,
-      error: `Invalid domain "@${domain}". Only valid @gmail.com accounts are permitted.`
-    };
-  }
-
   if (!username || username.length === 0) {
-    return { isValid: false, error: 'Username before @ cannot be empty.' };
-  }
-
-  if (username.length < 6) {
-    return { isValid: false, error: 'Gmail username must be at least 6 characters long (e.g., officer.smith@gmail.com).' };
-  }
-
-  if (username.length > 30) {
-    return { isValid: false, error: 'Gmail username cannot exceed 30 characters.' };
+    return { isValid: false, error: 'Username part of email cannot be empty.' };
   }
 
   if (username.startsWith('.') || username.endsWith('.')) {
-    return { isValid: false, error: 'Gmail username cannot start or end with a period.' };
+    return { isValid: false, error: 'Email username cannot start or end with a period.' };
   }
 
   if (username.includes('..')) {
-    return { isValid: false, error: 'Gmail username cannot contain consecutive periods (..).' };
+    return { isValid: false, error: 'Email username cannot contain consecutive periods (..).' };
   }
 
-  // Allowed characters in genuine Gmail username: letters, digits, and dots
-  const validCharsRegex = /^[a-z0-9.]+$/;
-  if (!validCharsRegex.test(username)) {
-    return { isValid: false, error: 'Gmail usernames may only contain letters (a-z), numbers (0-9), and periods (.).' };
+  // Domain structure checks
+  if (!domain || !domain.includes('.')) {
+    return { isValid: false, error: 'Email must contain a valid domain with an extension (e.g. .com).' };
+  }
+
+  const domainParts = domain.split('.');
+  const tld = domainParts[domainParts.length - 1];
+  if (!tld || tld.length < 2) {
+    return { isValid: false, error: 'Email domain extension must be at least 2 characters.' };
+  }
+
+  // Block disposable email providers for maximum security
+  if (DISPOSABLE_EMAIL_DOMAINS.has(domain)) {
+    return {
+      isValid: false,
+      error: 'Disposable or temporary email providers are strictly prohibited. Please use a genuine email address.'
+    };
   }
 
   return {
@@ -266,4 +290,71 @@ export function validateGmail(email: string): GmailValidationResult {
     normalizedEmail: `${username}@${domain}`
   };
 }
+
+/**
+ * Backwards-compatibility alias for validateEmail
+ */
+export function validateGmail(email: string): GmailValidationResult {
+  return validateEmail(email);
+}
+
+/**
+ * Strict Password Validation Result & Strength Analysis
+ */
+export interface PasswordValidationResult {
+  isValid: boolean;
+  score: number; // 0 to 4
+  hasMinLength: boolean;
+  hasUppercase: boolean;
+  hasLowercase: boolean;
+  hasNumberOrSpecial: boolean;
+  error?: string;
+}
+
+export function validatePassword(password: string): PasswordValidationResult {
+  if (!password || typeof password !== 'string') {
+    return {
+      isValid: false,
+      score: 0,
+      hasMinLength: false,
+      hasUppercase: false,
+      hasLowercase: false,
+      hasNumberOrSpecial: false,
+      error: 'Password cannot be empty.'
+    };
+  }
+
+  const hasMinLength = password.length >= 8;
+  const hasUppercase = /[A-Z]/.test(password);
+  const hasLowercase = /[a-z]/.test(password);
+  const hasNumberOrSpecial = /[0-9!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password);
+
+  let score = 0;
+  if (hasMinLength) score += 1;
+  if (hasUppercase) score += 1;
+  if (hasLowercase) score += 1;
+  if (hasNumberOrSpecial) score += 1;
+
+  let error: string | undefined;
+  if (!hasMinLength) {
+    error = 'Password must be at least 8 characters long.';
+  } else if (!hasUppercase) {
+    error = 'Password must include at least one uppercase letter (A-Z).';
+  } else if (!hasLowercase) {
+    error = 'Password must include at least one lowercase letter (a-z).';
+  } else if (!hasNumberOrSpecial) {
+    error = 'Password must include at least one number or special character.';
+  }
+
+  return {
+    isValid: hasMinLength && hasUppercase && hasLowercase && hasNumberOrSpecial,
+    score,
+    hasMinLength,
+    hasUppercase,
+    hasLowercase,
+    hasNumberOrSpecial,
+    error
+  };
+}
+
 

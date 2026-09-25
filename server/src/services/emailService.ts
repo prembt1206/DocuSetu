@@ -4,6 +4,7 @@ import { logger } from '../utils/logger.js';
 interface SendOtpOptions {
   toEmail: string;
   otpCode: string;
+  fullName?: string;
   expiresInMinutes?: number;
 }
 
@@ -53,10 +54,12 @@ class EmailService {
   }
 
   /**
-   * Send strict OTP verification email to user's Gmail
+   * Send strict OTP verification email to user
    */
-  async sendVerificationOtp({ toEmail, otpCode, expiresInMinutes = 5 }: SendOtpOptions): Promise<boolean> {
-    const subject = `🔐 DocuSetu Customs Portal — Your Verification Code: ${otpCode}`;
+  async sendVerificationOtp({ toEmail, otpCode, fullName, expiresInMinutes = 5 }: SendOtpOptions): Promise<boolean> {
+    const subject = `🔐 DocuSetu Account Verification Code: ${otpCode}`;
+
+    const greeting = fullName ? `Hello ${fullName},` : 'Hello,';
 
     const htmlContent = `
 <!DOCTYPE html>
@@ -83,20 +86,19 @@ class EmailService {
   <div class="container">
     <div class="header">
       <div class="logo-badge">⚓ DocuSetu IDP</div>
-      <h1 class="title">Secure Portal Verification</h1>
+      <h1 class="title">Account Verification</h1>
       <p class="subtitle">Global Trade & Customs Compliance Engine</p>
     </div>
 
-    <p class="info">Hello,</p>
+    <p class="info">${greeting}</p>
     <p class="info">
-      We received a request to authenticate your Gmail account <strong>${toEmail}</strong> on the DocuSetu Customs Portal. Enter the one-time verification code below to complete your login:
+      We received a request to verify your email address <strong>${toEmail}</strong> on DocuSetu. Use the one-time verification passcode below to complete your registration and set your password:
     </p>
 
     <div class="code-box">
       <div class="code">${otpCode}</div>
       <div class="expiry">⏳ Valid for ${expiresInMinutes} minutes only</div>
     </div>
-
     <div class="security-notice">
       <strong>🛡️ Strict Security Notice:</strong>
       <p style="margin: 6px 0 0 0;">
@@ -105,7 +107,7 @@ class EmailService {
     </div>
 
     <div class="footer">
-      DocuSetu Customs Intelligence Platform &bull; End-to-End Encrypted &bull; ISO/WCO Compliance
+      DocuSetu Intelligent Document Processing &bull; End-to-End Encrypted &bull; ISO/WCO Compliance
     </div>
   </div>
 </body>
