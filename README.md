@@ -109,11 +109,11 @@ GEMINI_API_KEY=your_google_gemini_api_key
 From the root directory:
 ```bash
 # Start both Server and Client concurrently:
-npm.cmd run dev
+npm run dev
 
 # Or run separately:
-npm.cmd run dev:server    # Runs on http://localhost:5000
-npm.cmd run dev:client    # Runs on http://localhost:5173
+npm run dev:server    # Runs on http://localhost:5000
+npm run dev:client    # Runs on http://localhost:5173
 ```
 
 Visit **`http://localhost:5173`** in your browser.

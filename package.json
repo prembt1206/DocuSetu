@@ -11,10 +11,10 @@
     "dev": "concurrently -n \"SERVER,CLIENT\" -c \"blue,magenta\" \"npm run dev --prefix server\" \"npm run dev --prefix client\"",
     "dev:server": "npm run dev --prefix server",
     "dev:client": "npm run dev --prefix client",
-    "build": "npm run build --prefix client",
-    "build:all": "npm run build --prefix server && npm run build --prefix client",
-    "build:server": "npm run build --prefix server",
-    "build:client": "npm run build --prefix client"
+    "build": "cd client && npm run build",
+    "build:all": "cd server && npm run build && cd ../client && npm run build",
+    "build:server": "cd server && npm run build",
+    "build:client": "cd client && npm run build"
   },
   "devDependencies": {
     "concurrently": "^9.1.2"
