@@ -370,6 +370,52 @@ class DatabaseService {
   }
 
   // ==========================================
+  // Users Operations
+  // ==========================================
+  async upsertUser(data: { id: string; email: string; organization_id?: string; role?: string; full_name?: string }) {
+    const orgId = data.organization_id || '11111111-1111-4111-8111-111111111111';
+    const role = data.role || 'Customs Broker & Compliance Officer';
+
+    if (this.isConnectedToSupabase && this.supabase) {
+      const { data: userRecord, error } = await this.supabase
+        .from('users')
+        .upsert({
+          id: data.id,
+          email: data.email,
+          full_name: data.full_name || null,
+          organization_id: orgId,
+          role: role
+        })
+        .select()
+        .single();
+      if (!error && userRecord) return userRecord;
+    }
+
+    const record = {
+      id: data.id,
+      email: data.email,
+      full_name: data.full_name || '',
+      organization_id: orgId,
+      role: role,
+      created_at: new Date().toISOString()
+    };
+    this.localUsers.set(data.id, record);
+    return record;
+  }
+
+  async getUserByEmail(email: string) {
+    if (this.isConnectedToSupabase && this.supabase) {
+      const { data, error } = await this.supabase
+        .from('users')
+        .select('*')
+        .eq('email', email.trim().toLowerCase())
+        .single();
+      if (!error && data) return data;
+    }
+    return Array.from(this.localUsers.values()).find(u => u.email.toLowerCase() === email.trim().toLowerCase()) || null;
+  }
+
+  // ==========================================
   // Shipments Operations
   // ==========================================
   async getShipments(orgId: string): Promise<DbShipment[]> {

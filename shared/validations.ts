@@ -193,3 +193,77 @@ export const CreateShipmentSchema = z.object({
   organizationId: z.string().uuid().optional()
 });
 export type CreateShipmentInput = z.infer<typeof CreateShipmentSchema>;
+
+// ==========================================
+// Gmail Validation & Auth Schemas
+// ==========================================
+export interface GmailValidationResult {
+  isValid: boolean;
+  error?: string;
+  normalizedEmail?: string;
+}
+
+/**
+ * Strict Gmail validation:
+ * Validates email format, verifies domain is exactly gmail.com,
+ * and checks username constraints (length, allowed characters, dot rules).
+ */
+export function validateGmail(email: string): GmailValidationResult {
+  if (!email || typeof email !== 'string') {
+    return { isValid: false, error: 'Email address cannot be empty.' };
+  }
+
+  const trimmed = email.trim().toLowerCase();
+
+  // Basic structure check
+  if (!trimmed.includes('@')) {
+    return { isValid: false, error: 'Email must contain an @ symbol.' };
+  }
+
+  const parts = trimmed.split('@');
+  if (parts.length !== 2) {
+    return { isValid: false, error: 'Email format is invalid (multiple @ symbols).' };
+  }
+
+  const [username, domain] = parts;
+
+  // Domain verification: must be gmail.com
+  if (domain !== 'gmail.com') {
+    return {
+      isValid: false,
+      error: `Invalid domain "@${domain}". Only valid @gmail.com accounts are permitted.`
+    };
+  }
+
+  if (!username || username.length === 0) {
+    return { isValid: false, error: 'Username before @ cannot be empty.' };
+  }
+
+  if (username.length < 3) {
+    return { isValid: false, error: 'Gmail username must be at least 3 characters long.' };
+  }
+
+  if (username.length > 30) {
+    return { isValid: false, error: 'Gmail username cannot exceed 30 characters.' };
+  }
+
+  if (username.startsWith('.') || username.endsWith('.')) {
+    return { isValid: false, error: 'Gmail username cannot start or end with a period.' };
+  }
+
+  if (username.includes('..')) {
+    return { isValid: false, error: 'Gmail username cannot contain consecutive periods (..).' };
+  }
+
+  // Allowed characters in Gmail username: letters, digits, dots, pluses, dashes
+  const validCharsRegex = /^[a-z0-9._+-]+$/;
+  if (!validCharsRegex.test(username)) {
+    return { isValid: false, error: 'Gmail username contains invalid special characters.' };
+  }
+
+  return {
+    isValid: true,
+    normalizedEmail: `${username}@gmail.com`
+  };
+}
+

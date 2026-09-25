@@ -16,6 +16,8 @@ CREATE TABLE IF NOT EXISTS organizations (
 -- 2. Users (Maps to auth.users in Supabase)
 CREATE TABLE IF NOT EXISTS users (
     id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+    email VARCHAR(255) NOT NULL,
+    full_name VARCHAR(255),
     organization_id UUID REFERENCES organizations(id) ON DELETE CASCADE,
     role VARCHAR(50) DEFAULT 'user',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
@@ -110,6 +112,10 @@ USING (id = get_current_user_org_id());
 CREATE POLICY "Users can view users within same organization"
 ON users FOR SELECT
 USING (organization_id = get_current_user_org_id());
+
+CREATE POLICY "Users can insert their own user record"
+ON users FOR INSERT
+WITH CHECK (id = auth.uid());
 
 CREATE POLICY "Users can update their own user record"
 ON users FOR UPDATE

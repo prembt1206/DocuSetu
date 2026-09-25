@@ -110,8 +110,8 @@ export const AppLayout: React.FC = () => {
                 {user?.email?.charAt(0).toUpperCase() || 'U'}
               </div>
               <div className="truncate">
-                <p className="text-xs font-medium text-slate-200 truncate">{user?.email}</p>
-                <p className="text-[10px] text-slate-400 truncate">{user?.role || 'Customs Broker'}</p>
+                <p className="text-xs font-medium text-slate-200 truncate">{user?.fullName || user?.email}</p>
+                <p className="text-[10px] text-slate-400 truncate">{user?.email}</p>
               </div>
             </div>
             <button

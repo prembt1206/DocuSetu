@@ -14,11 +14,20 @@ import {
 } from '../controllers/shipmentController.js';
 import { handleGetSettings, handleUpdateSettings } from '../controllers/settingsController.js';
 import { handleGetDashboardInsights } from '../controllers/insightsController.js';
+import { handleSendOtp, handleVerifyOtp, handleSyncUser } from '../controllers/authController.js';
 
 const router = Router();
 
-// Apply Auth Middleware to all API v1 routes
+// ==========================================
+// Public Auth Endpoints (Exempt from authMiddleware)
+// ==========================================
+router.post('/auth/otp/send', handleSendOtp);
+router.post('/auth/otp/verify', handleVerifyOtp);
+router.post('/auth/user', handleSyncUser);
+
+// Apply Auth Middleware to all protected API v1 routes
 router.use(authMiddleware);
+
 
 // Omnichannel Ingestion
 router.post('/upload', uploadMiddleware.single('file'), handleUpload);

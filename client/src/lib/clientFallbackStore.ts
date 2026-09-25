@@ -40,10 +40,20 @@ export interface ClientAnomaly {
   shipment_reference?: string;
 }
 
+export interface ClientUser {
+  id: string;
+  email: string;
+  organization_id: string;
+  role: string;
+  full_name?: string;
+  created_at: string;
+}
+
 class ClientFallbackStore {
   private shipments: Map<string, ClientShipment> = new Map();
   private documents: Map<string, ClientDocument[]> = new Map();
   private anomalies: Map<string, ClientAnomaly[]> = new Map();
+  private users: Map<string, ClientUser> = new Map();
   private settings: AdvisorySettings = {
     weightTolerancePercent: 2.0,
     missingHsCodeStrictness: 'critical',
@@ -66,6 +76,7 @@ class ClientFallbackStore {
         this.shipments = new Map(parsed.shipments);
         this.documents = new Map(parsed.documents);
         this.anomalies = new Map(parsed.anomalies);
+        if (parsed.users) this.users = new Map(parsed.users);
         if (parsed.settings) this.settings = parsed.settings;
         return;
       } catch (e) {
@@ -81,6 +92,7 @@ class ClientFallbackStore {
         shipments: Array.from(this.shipments.entries()),
         documents: Array.from(this.documents.entries()),
         anomalies: Array.from(this.anomalies.entries()),
+        users: Array.from(this.users.entries()),
         settings: this.settings
       };
       localStorage.setItem('docusetu_client_store', JSON.stringify(serialized));
@@ -657,6 +669,33 @@ class ClientFallbackStore {
     </Invoice>
   </Consignment>
 </Declaration>`;
+  }
+
+  upsertUser(user: { id: string; email: string; organizationId?: string; role?: string; fullName?: string }) {
+    const existing = this.getUserByEmail(user.email);
+    const updated: ClientUser = {
+      id: user.id || existing?.id || 'user-' + Math.random().toString(36).substring(2, 9),
+      email: user.email.toLowerCase().trim(),
+      organization_id: user.organizationId || '11111111-1111-4111-8111-111111111111',
+      role: user.role || 'Customs Broker & Compliance Officer',
+      full_name: user.fullName || existing?.full_name || user.email.split('@')[0],
+      created_at: existing?.created_at || new Date().toISOString()
+    };
+    this.users.set(updated.id, updated);
+    this.save();
+    return updated;
+  }
+
+  getUserByEmail(email: string): ClientUser | undefined {
+    const normalized = email.toLowerCase().trim();
+    for (const u of this.users.values()) {
+      if (u.email.toLowerCase().trim() === normalized) return u;
+    }
+    return undefined;
+  }
+
+  getUsers(): ClientUser[] {
+    return Array.from(this.users.values());
   }
 }
 
