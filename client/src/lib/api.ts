@@ -5,10 +5,10 @@ const isLocalhost =
   typeof window !== 'undefined' &&
   (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
 
-// When deployed on Vercel or external domain, use relative /api/v1 or configured VITE_API_BASE_URL
+// When deployed on Vercel or external domain, use relative /api; in local dev use port 5000
 const API_BASE = isLocalhost
-  ? (import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api/v1')
-  : (import.meta.env.VITE_API_BASE_URL || '/api/v1');
+  ? (import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api')
+  : (import.meta.env.VITE_API_BASE_URL || '/api');
 
 const getAuthHeaders = (): Record<string, string> => {
   const token = localStorage.getItem('docusetu_auth_token');

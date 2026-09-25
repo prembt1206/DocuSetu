@@ -71,9 +71,8 @@ app.get(['/health', '/api/health', '/api/v1/health'], (req, res) => {
   });
 });
 
-// Mount API v1 (both with and without /api prefix for flexible reverse proxying)
-app.use('/api/v1', apiRouter);
-app.use('/v1', apiRouter);
+// Mount API router across /api, /api/v1, and /v1
+app.use(['/api/v1', '/api', '/v1'], apiRouter);
 
 // Root api handler
 app.get(['/', '/api'], (req, res) => {
