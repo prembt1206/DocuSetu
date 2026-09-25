@@ -1,10 +1,36 @@
 import crypto from 'crypto';
+import fs from 'fs';
 
 const HMAC_SECRET = process.env.JWT_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || 'docusetu-enterprise-secure-hmac-sha512-salt-key';
+const USERS_FILE = '/tmp/docusetu_users.json';
 
 // In-memory persistent storage across serverless lambdas in warm execution
 const pendingOtps = new Map();
 const registeredUsers = new Map();
+
+export function getStoredUsers() {
+  try {
+    if (fs.existsSync(USERS_FILE)) {
+      const data = JSON.parse(fs.readFileSync(USERS_FILE, 'utf8'));
+      for (const [k, v] of Object.entries(data)) {
+        registeredUsers.set(k, v);
+      }
+    }
+  } catch {
+    // Ignore /tmp access error on non-POSIX environments
+  }
+  return registeredUsers;
+}
+
+export function saveUser(email, userData) {
+  registeredUsers.set(email, userData);
+  try {
+    const obj = Object.fromEntries(registeredUsers.entries());
+    fs.writeFileSync(USERS_FILE, JSON.stringify(obj), 'utf8');
+  } catch {
+    // Ignore
+  }
+}
 
 // Helper: PBKDF2 Password Hashing
 export function hashPassword(password) {

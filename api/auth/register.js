@@ -1,4 +1,4 @@
-import { pendingOtps, registeredUsers, hashPassword, createToken, checkVerifiedToken } from '../_lib/authStore.js';
+import { pendingOtps, saveUser, hashPassword, createToken, checkVerifiedToken } from '../_lib/authStore.js';
 import crypto from 'crypto';
 
 export default async function handler(req, res) {
@@ -55,7 +55,7 @@ export default async function handler(req, res) {
       createdAt: new Date().toISOString()
     };
 
-    registeredUsers.set(normalizedEmail, user);
+    saveUser(normalizedEmail, user);
     pendingOtps.delete(normalizedEmail);
 
     const token = createToken(user);

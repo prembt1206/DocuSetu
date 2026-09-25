@@ -1,4 +1,4 @@
-import { registeredUsers, verifyPassword, createToken } from '../_lib/authStore.js';
+import { getStoredUsers, verifyPassword, createToken } from '../_lib/authStore.js';
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Credentials', 'true');
@@ -24,7 +24,8 @@ export default async function handler(req, res) {
     }
 
     const normalizedEmail = email.trim().toLowerCase();
-    const user = registeredUsers.get(normalizedEmail);
+    const users = getStoredUsers();
+    const user = users.get(normalizedEmail);
 
     if (!user || !user.passwordHash) {
       res.status(401).json({ error: 'Invalid credentials. No registered account found with this email. Please create an account first.' });

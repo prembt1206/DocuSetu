@@ -819,7 +819,7 @@ class ClientFallbackStore {
     return { token, user };
   }
 
-  private hashPassword(password: string): string {
+  public hashPassword(password: string): string {
     let hash1 = 0x811c9dc5;
     let hash2 = 0x55555555;
     const salted = 'docusetu_sec_' + password;
