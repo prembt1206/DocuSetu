@@ -1,0 +1,30 @@
+{
+  "name": "docusetu-monorepo",
+  "version": "1.0.0",
+  "description": "DocuSetu - Intelligent Document Processing Platform for Global Supply Chain and Customs",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently -n \"SERVER,CLIENT\" -c \"blue,magenta\" \"npm.cmd run dev --prefix server\" \"npm.cmd run dev --prefix client\"",
+    "dev:server": "npm.cmd run dev --prefix server",
+    "dev:client": "npm.cmd run dev --prefix client",
+    "build": "npm.cmd run build --prefix server && npm.cmd run build --prefix client",
+    "build:server": "npm.cmd run build --prefix server",
+    "build:client": "npm.cmd run build --prefix client"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  },
+  "keywords": [
+    "supply-chain",
+    "customs",
+    "idp",
+    "gemini",
+    "logistics",
+    "intelligent-document-processing"
+  ],
+  "author": "DocuSetu Engineering Team",
+  "license": "UNLICENSED",
+  "dependencies": {
+    "zod": "^4.6.5"
+  }
+}

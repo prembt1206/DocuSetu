@@ -1,0 +1,43 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+5 0 obj
+<< /Length 894 >>
+stream
+BT /F1 11 Tf 50 750 Td (OCEAN BILL OF LADING) Tj ET
+BT /F1 11 Tf 50 734 Td (B/L No: MAEU9921448291          Issued Date: 2026-09-22) Tj ET
+BT /F1 11 Tf 50 718 Td (Carrier: Maersk Line Global     Vessel: MAERSK MC-KINNEY MOLLER) Tj ET
+BT /F1 11 Tf 50 702 Td (Shipper: Shenzhen MicroTech Electronic Devices Co., Ltd) Tj ET
+BT /F1 11 Tf 50 686 Td (Consignee: EuroSupply Chain Logistics B.V.) Tj ET
+BT /F1 11 Tf 50 670 Td (Notify Party: Rotterdam Gateway Customs Brokers) Tj ET
+BT /F1 11 Tf 50 654 Td (Port of Loading: Port of Shenzhen, CN) Tj ET
+BT /F1 11 Tf 50 638 Td (Port of Discharge: Port of Rotterdam, NL) Tj ET
+BT /F1 11 Tf 50 622 Td (Gross Weight: 5500.00 KG) Tj ET
+BT /F1 11 Tf 50 606 Td (Measurement: 28.40 CBM) Tj ET
+BT /F1 11 Tf 50 590 Td (Containers: MSKU7829104, MSKU7829110) Tj ET
+BT /F1 11 Tf 50 574 Td (Description: 2x40HQ Electronic Microcontrollers & NVMe Storage Modules) Tj ET
+endstream
+endobj
+xref
+0 6
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000241 00000 n 
+0000000311 00000 n 
+trailer
+<< /Size 6 /Root 1 0 R >>
+startxref
+1256
+%%EOF
