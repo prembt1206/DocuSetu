@@ -5,20 +5,20 @@ const isLocalhost =
   typeof window !== 'undefined' &&
   (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
 
-// When deployed on Vercel or external domain, use relative /api; in local dev use port 5000
+// In production / deployed domains, ALWAYS use relative '/api'; in local dev use port 5000
 const API_BASE = isLocalhost
-  ? (import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api')
-  : (import.meta.env.VITE_API_BASE_URL || '/api');
+  ? 'http://localhost:5000/api'
+  : '/api';
 
 const getAuthHeaders = (): Record<string, string> => {
   const token = localStorage.getItem('docusetu_auth_token');
   return token ? { Authorization: `Bearer ${token}` } : {};
 };
 
-// Safe fetch wrapper with timeout
+// Safe fetch wrapper with timeout (20s to allow remote SMTP TLS handshake)
 async function safeFetch(url: string, options: RequestInit = {}): Promise<Response> {
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 6000); // 6s timeout
+  const timeoutId = setTimeout(() => controller.abort(), 20000); // 20s timeout
   try {
     const res = await fetch(url, {
       ...options,
@@ -372,13 +372,20 @@ export const api = {
         throw new Error(parsed.error);
       }
     } catch (err: any) {
+      if (!isLocalhost) {
+        throw new Error(err.message || 'Failed to dispatch email verification code. Please try again.');
+      }
       // If error is an explicit validation/rate limit error from backend, re-throw
       if (err.message && !err.message.includes('HTTP 404') && !err.message.includes('Failed to fetch') && !err.message.includes('Network')) {
         throw err;
       }
     }
 
-    // Fallback: If backend is offline or on static Vercel preview without serverless function
+    if (!isLocalhost) {
+      throw new Error('Unable to connect to verification server. Please check your internet connection.');
+    }
+
+    // Fallback: Only in local development when offline
     return clientFallbackStore.sendOtp(normalizedEmail, fullName);
   },
 
