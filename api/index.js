@@ -77937,13 +77937,13 @@ var require_src7 = __commonJS({
   }
 });
 
-// server/src/index.ts
-var index_exports = {};
-__export(index_exports, {
+// server/src/app.ts
+var app_exports = {};
+__export(app_exports, {
   app: () => app,
-  default: () => index_default
+  default: () => app_default
 });
-module.exports = __toCommonJS(index_exports);
+module.exports = __toCommonJS(app_exports);
 var import_express2 = __toESM(require_express2());
 var import_cors = __toESM(require_lib3());
 
@@ -78514,7 +78514,7 @@ var helmet = Object.assign(
   }
 );
 
-// server/src/index.ts
+// server/src/app.ts
 var import_dotenv = __toESM(require_main());
 var import_path3 = __toESM(require("path"));
 
@@ -121699,23 +121699,18 @@ var errorHandler = (err, req, res, next) => {
   });
 };
 
-// server/src/index.ts
+// server/src/app.ts
 import_dotenv.default.config({ path: import_path3.default.resolve(process.cwd(), "../.env") });
 import_dotenv.default.config();
 var app = (0, import_express2.default)();
-var PORT = process.env.PORT || 5e3;
 app.set("trust proxy", 1);
 app.use(
   helmet({
     crossOriginResourcePolicy: { policy: "cross-origin" },
     contentSecurityPolicy: false,
-    // API endpoints serve JSON; SPA handled on client
     frameguard: { action: "deny" },
-    // Anti-Clickjacking
     noSniff: true,
-    // Anti-MIME sniffing
     xssFilter: true,
-    // XSS Auditor
     hsts: {
       maxAge: 31536e3,
       includeSubDomains: true,
@@ -121734,8 +121729,11 @@ app.use(
 );
 app.use(import_express2.default.json({ limit: "10mb" }));
 app.use(import_express2.default.urlencoded({ extended: true, limit: "10mb" }));
-var uploadsDir = import_path3.default.resolve(process.cwd(), "uploads");
-app.use("/uploads", import_express2.default.static(uploadsDir));
+try {
+  const uploadsDir = import_path3.default.resolve(process.cwd(), "uploads");
+  app.use("/uploads", import_express2.default.static(uploadsDir));
+} catch {
+}
 app.get(["/health", "/api/health", "/api/v1/health"], (req, res) => {
   res.json({
     status: "healthy",
@@ -121747,21 +121745,16 @@ app.get(["/health", "/api/health", "/api/v1/health"], (req, res) => {
 });
 app.use("/api/v1", routes_default);
 app.use("/v1", routes_default);
-app.use(errorHandler);
-var isServerless = Boolean(
-  process.env.VERCEL || process.env.VERCEL_ENV || process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.LAMBDA_TASK_ROOT || process.env.NOW_REGION
-);
-if (!isServerless) {
-  app.listen(PORT, () => {
-    logger.info(`=======================================================`);
-    logger.info(`\u{1F6E1}\uFE0F DocuSetu Enterprise IDP Server running on port ${PORT}`);
-    logger.info(`\u{1F310} Health check: http://localhost:${PORT}/health`);
-    logger.info(`\u{1F4E6} API Base URL: http://localhost:${PORT}/api/v1`);
-    logger.info(`\u{1F512} Security: Helmet, RateLimiter, Anti-BruteForce OTP Active`);
-    logger.info(`=======================================================`);
+app.get(["/", "/api"], (req, res) => {
+  res.json({
+    service: "DocuSetu IDP API",
+    status: "online",
+    version: "1.0.0",
+    documentation: "/api/v1/health"
   });
-}
-var index_default = app;
+});
+app.use(errorHandler);
+var app_default = app;
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
   app
