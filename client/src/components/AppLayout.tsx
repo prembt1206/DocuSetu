@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard,
@@ -9,14 +9,15 @@ import {
   Sparkles,
   ShieldCheck,
   Building2,
-  ExternalLink,
   ChevronRight
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth.js';
+import { AuditLogsModal } from './AuditLogsModal.js';
 
 export const AppLayout: React.FC = () => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const [isAuditLogsOpen, setIsAuditLogsOpen] = useState(false);
 
   const navItems = [
     { to: '/dashboard', label: 'Dashboard & Insights', icon: LayoutDashboard },
@@ -144,15 +145,14 @@ export const AppLayout: React.FC = () => {
               Ingest Trade PDF
             </button>
 
-            <a
-              href="https://github.com"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-200 transition-colors"
+            <button
+              onClick={() => setIsAuditLogsOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-700/80 text-slate-300 hover:text-white text-xs font-semibold border border-slate-700/80 transition-all cursor-pointer shadow-sm active:scale-95"
+              title="Open Compliance Audit Trail"
             >
+              <ShieldCheck className="w-3.5 h-3.5 text-brand-400" />
               <span>Audit Logs</span>
-              <ExternalLink className="w-3 h-3" />
-            </a>
+            </button>
           </div>
         </header>
 
@@ -161,6 +161,12 @@ export const AppLayout: React.FC = () => {
           <Outlet />
         </main>
       </div>
+
+      {/* Compliance Audit Trail Modal */}
+      <AuditLogsModal
+        isOpen={isAuditLogsOpen}
+        onClose={() => setIsAuditLogsOpen(false)}
+      />
     </div>
   );
 };
