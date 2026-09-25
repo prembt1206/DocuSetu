@@ -78,7 +78,15 @@ app.use('/api/v1', apiRouter);
 app.use(errorHandler);
 
 // Start Server if not in serverless runtime
-if (process.env.VERCEL !== '1') {
+const isServerless = Boolean(
+  process.env.VERCEL ||
+  process.env.VERCEL_ENV ||
+  process.env.AWS_LAMBDA_FUNCTION_NAME ||
+  process.env.LAMBDA_TASK_ROOT ||
+  process.env.NOW_REGION
+);
+
+if (!isServerless) {
   app.listen(PORT, () => {
     logger.info(`=======================================================`);
     logger.info(`🛡️ DocuSetu Enterprise IDP Server running on port ${PORT}`);
