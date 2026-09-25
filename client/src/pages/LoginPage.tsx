@@ -64,6 +64,7 @@ export const LoginPage: React.FC = () => {
   const [resendTimer, setResendTimer] = useState<number>(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [devOtpCode, setDevOtpCode] = useState<string | null>(null);
+  const [deliveryNote, setDeliveryNote] = useState<string | null>(null);
   const [wasRealEmailSent, setWasRealEmailSent] = useState<boolean>(false);
 
   const otpInputsRef = useRef<(HTMLInputElement | null)[]>([]);
@@ -130,9 +131,11 @@ export const LoginPage: React.FC = () => {
       setSuccessMsg(res.message || `A 6-digit security OTP has been generated for ${createEmail}`);
       if (res.devOtp) {
         setDevOtpCode(res.devOtp);
+        setDeliveryNote(res.note || null);
         setWasRealEmailSent(false);
       } else {
         setDevOtpCode(null);
+        setDeliveryNote(null);
         setWasRealEmailSent(true);
       }
       setResendTimer(60);
@@ -210,9 +213,11 @@ export const LoginPage: React.FC = () => {
       setSuccessMsg(res.message || `A new 6-digit verification code has been dispatched to ${createEmail}`);
       if (res.devOtp) {
         setDevOtpCode(res.devOtp);
+        setDeliveryNote(res.note || null);
         setWasRealEmailSent(false);
       } else {
         setDevOtpCode(null);
+        setDeliveryNote(null);
         setWasRealEmailSent(true);
       }
       setResendTimer(60);
@@ -560,9 +565,15 @@ export const LoginPage: React.FC = () => {
                           Auto-fill: {devOtpCode}
                         </button>
                       </div>
-                      <p className="text-[11px] text-amber-200/90 leading-relaxed">
-                        To receive OTPs in your real Gmail inbox, set <code className="bg-slate-950 px-1 py-0.5 rounded text-amber-300 font-mono">SMTP_USER</code> and <code className="bg-slate-950 px-1 py-0.5 rounded text-amber-300 font-mono">SMTP_PASS</code> (16-char Gmail App Password) in your <code className="bg-slate-950 px-1 py-0.5 rounded text-amber-300 font-mono">.env</code> or Vercel Environment Variables.
-                      </p>
+                      {deliveryNote ? (
+                        <p className="text-[11px] text-amber-200/90 leading-relaxed font-medium bg-amber-950/40 p-2 rounded-lg border border-amber-500/20">
+                          {deliveryNote}
+                        </p>
+                      ) : (
+                        <p className="text-[11px] text-amber-200/90 leading-relaxed">
+                          To receive OTPs in your real Gmail inbox, set <code className="bg-slate-950 px-1 py-0.5 rounded text-amber-300 font-mono">SMTP_USER</code> and <code className="bg-slate-950 px-1 py-0.5 rounded text-amber-300 font-mono">SMTP_PASS</code> (16-char Gmail App Password) in your <code className="bg-slate-950 px-1 py-0.5 rounded text-amber-300 font-mono">.env</code> or Vercel Environment Variables.
+                        </p>
+                      )}
                       <div className="flex items-center gap-1.5 text-[10px] text-amber-400 font-medium pt-0.5">
                         <Lock className="w-3 h-3 shrink-0" />
                         <span>OTP expires in 5 minutes &bull; Maximum 3 attempts</span>

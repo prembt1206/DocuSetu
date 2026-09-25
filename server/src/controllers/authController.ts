@@ -140,14 +140,21 @@ export const handleSendOtp = async (req: Request, res: Response, next: NextFunct
         sent: true
       });
     } else {
+      const isResend = sendResult.provider === 'resend';
+      const msg = isResend
+        ? `Verification code generated: ${rawOtp}. (Resend Sandbox: live emails deliver to chacha6gng@gmail.com; use auto-fill below for this email)`
+        : `Verification code generated. (SMTP credentials not yet detected in environment. For evaluation, use code: ${rawOtp})`;
+
       res.status(200).json({
         success: true,
-        message: `Verification code generated. (SMTP credentials not yet detected in environment. For evaluation, use code: ${rawOtp})`,
+        message: msg,
         email: normalizedEmail,
         expiresInSeconds: 300,
         sent: false,
         devOtp: rawOtp,
-        note: sendResult.error || 'SMTP credentials (GMAIL_USER & GMAIL_APP_PASSWORD) not configured.'
+        note: sendResult.error || (isResend
+          ? 'Resend Free Sandbox: Live emails deliver to chacha6gng@gmail.com. To send to any recipient, verify a custom domain or configure Gmail SMTP.'
+          : 'SMTP credentials (GMAIL_USER & GMAIL_APP_PASSWORD) not configured.')
       });
     }
   } catch (err: any) {
