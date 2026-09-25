@@ -1,4 +1,4 @@
-import { pendingOtps, registeredUsers, hashPassword, createToken } from '../_lib/authStore.js';
+import { pendingOtps, registeredUsers, hashPassword, createToken, checkVerifiedToken } from '../_lib/authStore.js';
 import crypto from 'crypto';
 
 export default async function handler(req, res) {
@@ -18,7 +18,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { email, fullName, password, code } = req.body || {};
+    const { email, fullName, password, code, verificationToken } = req.body || {};
     if (!email || !fullName || !password) {
       res.status(400).json({ error: 'All fields (email, full name, password) are required.' });
       return;
@@ -26,9 +26,12 @@ export default async function handler(req, res) {
 
     const normalizedEmail = email.trim().toLowerCase();
 
-    // Verify OTP state
+    // Verify OTP state via cryptographic token OR memory
+    const isTokenVerified = verificationToken && checkVerifiedToken(normalizedEmail, verificationToken);
     const pending = pendingOtps.get(normalizedEmail);
-    if (!pending || (!pending.verified && pending.code !== code?.trim())) {
+    const isMemoryVerified = pending && (pending.verified || pending.code === code?.trim());
+
+    if (!isTokenVerified && !isMemoryVerified) {
       res.status(400).json({ error: 'Please verify your email address using the one-time passcode first.' });
       return;
     }

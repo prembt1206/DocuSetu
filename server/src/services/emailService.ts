@@ -126,6 +126,7 @@ class EmailService {
     `;
 
     // 1. Check Resend API if provided
+    let resendError: string | null = null;
     const fallbackResendKey = Buffer.from('cmVfSHhXaGpBek5fQnJFYk1DcllTQ1JjcEt3OHdocHpDd0hI', 'base64').toString('utf8');
     const resendKey = process.env.RESEND_API_KEY || fallbackResendKey;
     if (resendKey) {
@@ -152,14 +153,11 @@ class EmailService {
         }
         logger.warn(`[EmailService] Resend API rejected ${toEmail}:`, data?.message);
         if (data?.message) {
-          return {
-            sent: false,
-            provider: 'resend',
-            error: data.message
-          };
+          resendError = data.message;
         }
       } catch (err: any) {
         logger.error(`[EmailService] Resend dispatch error:`, err.message);
+        resendError = err.message;
       }
     }
 
@@ -187,8 +185,8 @@ class EmailService {
     logger.info(`[EmailService - DEV DISPATCH] Email to [${toEmail}] with OTP [${otpCode}] (Valid for ${expiresInMinutes}m)`);
     return {
       sent: false,
-      provider: 'dev_fallback',
-      error: 'SMTP credentials (GMAIL_USER & GMAIL_APP_PASSWORD) not configured in environment.'
+      provider: resendError ? 'resend' : 'dev_fallback',
+      error: resendError || 'SMTP credentials (GMAIL_USER & GMAIL_APP_PASSWORD) not configured in environment.'
     };
   }
 }

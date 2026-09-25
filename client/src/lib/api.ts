@@ -362,6 +362,9 @@ export const api = {
       });
       const parsed = await safeJsonParse(res);
       if (parsed.success && parsed.data) {
+        if (parsed.data.otpToken && typeof window !== 'undefined') {
+          sessionStorage.setItem(`docusetu_otp_token_${normalizedEmail}`, parsed.data.otpToken);
+        }
         return parsed.data;
       }
       // If server returned an explicit error (e.g. rate limit, invalid email), bubble it up
@@ -382,15 +385,21 @@ export const api = {
   async verifyOtp(email: string, code: string) {
     const normalizedEmail = email.trim().toLowerCase();
     const cleanCode = code.trim();
+    const otpToken = typeof window !== 'undefined'
+      ? sessionStorage.getItem(`docusetu_otp_token_${normalizedEmail}`) || undefined
+      : undefined;
 
     try {
       const res = await safeFetch(`${API_BASE}/auth/otp/verify`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: normalizedEmail, code: cleanCode })
+        body: JSON.stringify({ email: normalizedEmail, code: cleanCode, token: otpToken })
       });
       const parsed = await safeJsonParse(res);
       if (parsed.success && parsed.data) {
+        if (parsed.data.verificationToken && typeof window !== 'undefined') {
+          sessionStorage.setItem(`docusetu_verified_token_${normalizedEmail}`, parsed.data.verificationToken);
+        }
         return parsed.data;
       }
       if (parsed.status !== 404 && parsed.error) {
@@ -408,11 +417,16 @@ export const api = {
 
   async createAccount(data: { email: string; fullName: string; password: string; code?: string }) {
     const normalizedEmail = data.email.trim().toLowerCase();
+    const verificationToken = typeof window !== 'undefined'
+      ? sessionStorage.getItem(`docusetu_verified_token_${normalizedEmail}`) || undefined
+      : undefined;
+
     const payload = {
       email: normalizedEmail,
       fullName: data.fullName.trim(),
       password: data.password,
-      code: data.code?.trim()
+      code: data.code?.trim(),
+      verificationToken
     };
 
     try {
@@ -432,6 +446,10 @@ export const api = {
           role: parsed.data.user.role,
           emailVerified: true
         });
+        if (typeof window !== 'undefined') {
+          sessionStorage.removeItem(`docusetu_otp_token_${normalizedEmail}`);
+          sessionStorage.removeItem(`docusetu_verified_token_${normalizedEmail}`);
+        }
         return parsed.data;
       }
       if (parsed.status !== 404 && parsed.error) {
@@ -450,6 +468,11 @@ export const api = {
       password: data.password,
       code: data.code
     });
+
+    if (typeof window !== 'undefined') {
+      sessionStorage.removeItem(`docusetu_otp_token_${normalizedEmail}`);
+      sessionStorage.removeItem(`docusetu_verified_token_${normalizedEmail}`);
+    }
 
     return {
       success: true,

@@ -1,4 +1,4 @@
-import { pendingOtps } from '../../_lib/authStore.js';
+import { pendingOtps, createOtpToken } from '../../_lib/authStore.js';
 
 export default async function handler(req, res) {
   // Enable CORS
@@ -104,13 +104,56 @@ export default async function handler(req, res) {
       }
     }
 
-    if (resendSent) {
+    // 2. Attempt SMTP / Gmail fallback if Resend was not successful
+    let smtpSent = false;
+    let smtpError = null;
+    const smtpUser = process.env.SMTP_USER || process.env.GMAIL_USER;
+    const smtpPass = process.env.SMTP_PASS || process.env.GMAIL_APP_PASSWORD;
+
+    if (!resendSent && smtpUser && smtpPass) {
+      try {
+        const nodemailer = (await import('nodemailer')).default;
+        const smtpHost = process.env.SMTP_HOST;
+        const smtpPort = parseInt(process.env.SMTP_PORT || '587', 10);
+
+        const transporter = smtpHost
+          ? nodemailer.createTransport({
+              host: smtpHost,
+              port: smtpPort,
+              secure: smtpPort === 465,
+              auth: { user: smtpUser, pass: smtpPass },
+              tls: { rejectUnauthorized: false }
+            })
+          : nodemailer.createTransport({
+              service: 'gmail',
+              auth: { user: smtpUser, pass: smtpPass }
+            });
+
+        const fromAddress = process.env.SMTP_FROM || smtpUser;
+        await transporter.sendMail({
+          from: `"DocuSetu Trade Security" <${fromAddress}>`,
+          to: normalizedEmail,
+          subject: `🔐 DocuSetu Account Verification Code: ${rawOtp}`,
+          text: `Your DocuSetu verification code is: ${rawOtp}. Valid for 5 minutes. Never share this code.`,
+          html: htmlContent
+        });
+        smtpSent = true;
+      } catch (err) {
+        smtpError = err.message;
+        console.error('SMTP fallback send error:', err);
+      }
+    }
+
+    const otpToken = createOtpToken(normalizedEmail, rawOtp, expiresAt);
+
+    if (resendSent || smtpSent) {
       res.status(200).json({
         success: true,
         message: `A 6-digit verification code has been dispatched directly to your inbox at ${normalizedEmail}. Please check your inbox or Spam folder.`,
         email: normalizedEmail,
         expiresInSeconds: 300,
-        sent: true
+        sent: true,
+        otpToken
       });
       return;
     }
@@ -128,7 +171,8 @@ export default async function handler(req, res) {
       expiresInSeconds: 300,
       sent: false,
       devOtp: rawOtp,
-      note: resendError || 'Resend Free Sandbox: Live emails deliver to chacha6gng@gmail.com. To send to any recipient, verify a custom domain or configure Gmail SMTP.'
+      otpToken,
+      note: resendError || smtpError || 'Resend Free Sandbox: Live emails deliver to chacha6gng@gmail.com. To send to any recipient, verify a custom domain or configure Gmail SMTP.'
     });
   } catch (err) {
     console.error('send OTP error:', err);
