@@ -8,15 +8,22 @@ interface SendOtpOptions {
   expiresInMinutes?: number;
 }
 
+export interface EmailSendResult {
+  sent: boolean;
+  provider: 'smtp' | 'gmail' | 'resend' | 'dev_fallback';
+  messageId?: string;
+  error?: string;
+}
+
 class EmailService {
   private transporter: Transporter | null = null;
   private isConfigured: boolean = false;
 
   constructor() {
-    this.initTransporter();
+    this.refreshTransporter();
   }
 
-  private initTransporter() {
+  public refreshTransporter() {
     const smtpHost = process.env.SMTP_HOST;
     const smtpPort = parseInt(process.env.SMTP_PORT || '587', 10);
     const smtpUser = process.env.SMTP_USER || process.env.GMAIL_USER;
@@ -49,6 +56,8 @@ class EmailService {
       this.isConfigured = true;
       logger.info(`[EmailService] Configured with direct Gmail SMTP for ${smtpUser}`);
     } else {
+      this.transporter = null;
+      this.isConfigured = false;
       logger.info('[EmailService] Running in development mode. Ready to integrate with SMTP / Gmail App Password.');
     }
   }
@@ -56,9 +65,11 @@ class EmailService {
   /**
    * Send strict OTP verification email to user
    */
-  async sendVerificationOtp({ toEmail, otpCode, fullName, expiresInMinutes = 5 }: SendOtpOptions): Promise<boolean> {
-    const subject = `🔐 DocuSetu Account Verification Code: ${otpCode}`;
+  async sendVerificationOtp({ toEmail, otpCode, fullName, expiresInMinutes = 5 }: SendOtpOptions): Promise<EmailSendResult> {
+    // Dynamically check transporter in case .env was modified or loaded
+    this.refreshTransporter();
 
+    const subject = `🔐 DocuSetu Account Verification Code: ${otpCode}`;
     const greeting = fullName ? `Hello ${fullName},` : 'Hello,';
 
     const htmlContent = `
@@ -114,9 +125,40 @@ class EmailService {
 </html>
     `;
 
+    // 1. Check Resend API if provided
+    const resendKey = process.env.RESEND_API_KEY;
+    if (resendKey) {
+      try {
+        const fromAddress = process.env.RESEND_FROM || 'DocuSetu <onboarding@resend.dev>';
+        const res = await fetch('https://api.resend.com/emails', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${resendKey}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            from: fromAddress,
+            to: [toEmail],
+            subject,
+            html: htmlContent,
+            text: `Your DocuSetu verification code is: ${otpCode}. Valid for ${expiresInMinutes} minutes.`
+          })
+        });
+        const data = await res.json() as any;
+        if (res.ok && data?.id) {
+          logger.info(`[EmailService] Resend email dispatched to ${toEmail} (Id: ${data.id})`);
+          return { sent: true, provider: 'resend', messageId: data.id };
+        }
+        logger.warn(`[EmailService] Resend API returned error:`, data);
+      } catch (err: any) {
+        logger.error(`[EmailService] Resend dispatch error:`, err.message);
+      }
+    }
+
+    // 2. Check SMTP / Gmail App Password
     if (this.transporter && this.isConfigured) {
       try {
-        const fromAddress = process.env.SMTP_FROM || process.env.SMTP_USER || 'no-reply@docusetu.io';
+        const fromAddress = process.env.SMTP_FROM || process.env.SMTP_USER || process.env.GMAIL_USER || 'no-reply@docusetu.io';
         const info = await this.transporter.sendMail({
           from: `"DocuSetu Trade Security" <${fromAddress}>`,
           to: toEmail,
@@ -126,17 +168,20 @@ class EmailService {
         });
 
         logger.info(`[EmailService] Real OTP email sent successfully to ${toEmail} (MessageId: ${info.messageId})`);
-        return true;
+        return { sent: true, provider: 'smtp', messageId: info.messageId };
       } catch (err: any) {
         logger.error(`[EmailService] Failed to send real email via SMTP to ${toEmail}:`, err.message);
-        // Fallback to logged delivery
-        return false;
+        return { sent: false, provider: 'smtp', error: err.message };
       }
-    } else {
-      // In development or when no SMTP configured yet, log delivery prominently
-      logger.info(`[EmailService - DEV DISPATCH] Email to [${toEmail}] with OTP [${otpCode}] (Valid for ${expiresInMinutes}m)`);
-      return true;
     }
+
+    // 3. Dev Fallback: No SMTP credentials configured
+    logger.info(`[EmailService - DEV DISPATCH] Email to [${toEmail}] with OTP [${otpCode}] (Valid for ${expiresInMinutes}m)`);
+    return {
+      sent: false,
+      provider: 'dev_fallback',
+      error: 'SMTP credentials (GMAIL_USER & GMAIL_APP_PASSWORD) not configured in environment.'
+    };
   }
 }
 

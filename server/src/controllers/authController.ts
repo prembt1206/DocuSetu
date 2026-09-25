@@ -122,21 +122,34 @@ export const handleSendOtp = async (req: Request, res: Response, next: NextFunct
     });
 
     // Send real email via EmailService
-    const emailSent = await emailService.sendVerificationOtp({
+    const sendResult = await emailService.sendVerificationOtp({
       toEmail: normalizedEmail,
       otpCode: rawOtp,
       fullName: fullName?.trim(),
       expiresInMinutes: 5
     });
 
-    logger.info(`[Auth Security] Dispatched 6-digit OTP to: ${normalizedEmail} (Expires in 5m)`);
+    logger.info(`[Auth Security] Dispatched 6-digit OTP to: ${normalizedEmail} (Expires in 5m, Provider: ${sendResult.provider}, Sent: ${sendResult.sent})`);
 
-    res.status(200).json({
-      message: `A 6-digit verification code has been dispatched to ${normalizedEmail}. Please check your inbox and spam folder.`,
-      email: normalizedEmail,
-      expiresInSeconds: 300,
-      sent: emailSent
-    });
+    if (sendResult.sent) {
+      res.status(200).json({
+        success: true,
+        message: `A 6-digit verification code has been dispatched directly to your inbox at ${normalizedEmail}. Please check your inbox or Spam folder.`,
+        email: normalizedEmail,
+        expiresInSeconds: 300,
+        sent: true
+      });
+    } else {
+      res.status(200).json({
+        success: true,
+        message: `Verification code generated. (SMTP credentials not yet detected in environment. For evaluation, use code: ${rawOtp})`,
+        email: normalizedEmail,
+        expiresInSeconds: 300,
+        sent: false,
+        devOtp: rawOtp,
+        note: sendResult.error || 'SMTP credentials (GMAIL_USER & GMAIL_APP_PASSWORD) not configured.'
+      });
+    }
   } catch (err: any) {
     logger.error('handleSendOtp error:', err);
     next(err);

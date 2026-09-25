@@ -18,7 +18,8 @@ import {
   EyeOff,
   Check,
   UserPlus,
-  LogIn
+  LogIn,
+  Sparkles
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth.js';
 import { validateEmail, validatePassword } from '@shared/validations.js';
@@ -62,6 +63,8 @@ export const LoginPage: React.FC = () => {
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [resendTimer, setResendTimer] = useState<number>(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [devOtpCode, setDevOtpCode] = useState<string | null>(null);
+  const [wasRealEmailSent, setWasRealEmailSent] = useState<boolean>(false);
 
   const otpInputsRef = useRef<(HTMLInputElement | null)[]>([]);
   const from = location.state?.from?.pathname || '/dashboard';
@@ -124,7 +127,14 @@ export const LoginPage: React.FC = () => {
     setIsSubmitting(true);
     try {
       const res = await sendOtp(createEmail, fullName.trim());
-      setSuccessMsg(res.message || `A 6-digit security OTP has been sent to ${createEmail}`);
+      setSuccessMsg(res.message || `A 6-digit security OTP has been generated for ${createEmail}`);
+      if (res.devOtp) {
+        setDevOtpCode(res.devOtp);
+        setWasRealEmailSent(false);
+      } else {
+        setDevOtpCode(null);
+        setWasRealEmailSent(true);
+      }
       setResendTimer(60);
       setCreateStep('otp');
     } catch (err: any) {
@@ -198,6 +208,13 @@ export const LoginPage: React.FC = () => {
     try {
       const res = await sendOtp(createEmail, fullName.trim());
       setSuccessMsg(res.message || `A new 6-digit verification code has been dispatched to ${createEmail}`);
+      if (res.devOtp) {
+        setDevOtpCode(res.devOtp);
+        setWasRealEmailSent(false);
+      } else {
+        setDevOtpCode(null);
+        setWasRealEmailSent(true);
+      }
       setResendTimer(60);
       setOtpDigits(['', '', '', '', '', '']);
       otpInputsRef.current[0]?.focus();
@@ -525,19 +542,47 @@ export const LoginPage: React.FC = () => {
                   </div>
 
                   {/* Instruction banner */}
-                  <div className="p-3.5 rounded-xl bg-slate-900/90 border border-brand-500/30 text-slate-200 text-xs space-y-1.5">
-                    <div className="flex items-center gap-2 text-brand-300 font-bold text-xs">
-                      <Inbox className="w-4 h-4 text-brand-400" />
-                      <span>Check Your Email Inbox</span>
+                  {devOtpCode ? (
+                    <div className="p-3.5 rounded-xl bg-amber-500/15 border border-amber-500/40 text-amber-200 text-xs space-y-2 animate-in fade-in">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-1.5 font-bold text-amber-300">
+                          <Sparkles className="w-4 h-4 text-amber-400 shrink-0" />
+                          <span>Evaluation Mode OTP:</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const digits = devOtpCode.slice(0, 6).split('');
+                            setOtpDigits(digits);
+                          }}
+                          className="px-2.5 py-1 rounded-lg bg-amber-400/25 hover:bg-amber-400/35 text-amber-200 text-[11px] font-mono font-bold transition-all cursor-pointer border border-amber-400/40 shadow-sm"
+                        >
+                          Auto-fill: {devOtpCode}
+                        </button>
+                      </div>
+                      <p className="text-[11px] text-amber-200/90 leading-relaxed">
+                        To receive OTPs in your real Gmail inbox, set <code className="bg-slate-950 px-1 py-0.5 rounded text-amber-300 font-mono">SMTP_USER</code> and <code className="bg-slate-950 px-1 py-0.5 rounded text-amber-300 font-mono">SMTP_PASS</code> (16-char Gmail App Password) in your <code className="bg-slate-950 px-1 py-0.5 rounded text-amber-300 font-mono">.env</code> or Vercel Environment Variables.
+                      </p>
+                      <div className="flex items-center gap-1.5 text-[10px] text-amber-400 font-medium pt-0.5">
+                        <Lock className="w-3 h-3 shrink-0" />
+                        <span>OTP expires in 5 minutes &bull; Maximum 3 attempts</span>
+                      </div>
                     </div>
-                    <p className="text-[11px] text-slate-300 leading-relaxed">
-                      We have dispatched a 6-digit one-time passcode (OTP) to <strong className="text-white">{createEmail}</strong>. Please check your inbox or Spam folder.
-                    </p>
-                    <div className="flex items-center gap-1.5 text-[10px] text-amber-400 font-medium pt-0.5">
-                      <Lock className="w-3 h-3 shrink-0" />
-                      <span>OTP expires in 5 minutes &bull; Maximum 3 attempts</span>
+                  ) : (
+                    <div className="p-3.5 rounded-xl bg-slate-900/90 border border-brand-500/30 text-slate-200 text-xs space-y-1.5">
+                      <div className="flex items-center gap-2 text-brand-300 font-bold text-xs">
+                        <Inbox className="w-4 h-4 text-brand-400" />
+                        <span>Check Your Email Inbox</span>
+                      </div>
+                      <p className="text-[11px] text-slate-300 leading-relaxed">
+                        We have dispatched a 6-digit one-time passcode (OTP) to <strong className="text-white">{createEmail}</strong>. Please check your inbox or Spam/Junk folder.
+                      </p>
+                      <div className="flex items-center gap-1.5 text-[10px] text-emerald-400 font-medium pt-0.5">
+                        <CheckCircle2 className="w-3 h-3 shrink-0" />
+                        <span>Live Email Dispatched &bull; Valid for 5 minutes</span>
+                      </div>
                     </div>
-                  </div>
+                  )}
 
                   {/* 6 Digit Inputs */}
                   <div className="space-y-2">

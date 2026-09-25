@@ -19,7 +19,7 @@ interface AuthContextType {
   isAuthenticated: boolean;
   validateEmail: (email: string) => EmailValidationResult;
   validateGmail: (email: string) => EmailValidationResult;
-  sendOtp: (email: string, fullName?: string) => Promise<{ message: string; expiresInSeconds?: number }>;
+  sendOtp: (email: string, fullName?: string) => Promise<{ message: string; expiresInSeconds?: number; sent?: boolean; devOtp?: string; note?: string }>;
   verifyOtp: (email: string, code: string) => Promise<{ verified: boolean; message: string }>;
   createAccount: (params: { email: string; fullName: string; password: string; code?: string }) => Promise<UserProfile>;
   login: (email: string, password: string) => Promise<UserProfile>;
