@@ -278,64 +278,31 @@ export const api = {
     return clientFallbackStore.getDashboardInsights();
   },
 
-  // Authentication & OTP Verification
+  // Authentication & Strict OTP Verification
   async sendOtp(email: string) {
-    try {
-      const res = await safeFetch(`${API_BASE}/auth/otp/send`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email })
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || 'Failed to send OTP verification code');
-      }
-      return data;
-    } catch (err: any) {
-      console.warn('API /auth/otp/send failed or offline, generating client fallback OTP:', err);
-      // Client-side fallback OTP for offline/static deployment
-      const code = Math.floor(100000 + Math.random() * 900000).toString();
-      sessionStorage.setItem(`docusetu_otp_${email.toLowerCase().trim()}`, code);
-      return {
-        message: `Verification OTP generated for ${email}`,
-        email,
-        code,
-        expiresInSeconds: 600
-      };
+    const res = await safeFetch(`${API_BASE}/auth/otp/send`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: email.trim().toLowerCase() })
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.error || 'Failed to send OTP verification code to Gmail.');
     }
+    return data;
   },
 
-  async verifyOtp(email: string, code: string, organizationName?: string) {
-    try {
-      const res = await safeFetch(`${API_BASE}/auth/otp/verify`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, code, organizationName })
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || 'Invalid verification code');
-      }
-      return data;
-    } catch (err: any) {
-      console.warn('API /auth/otp/verify offline, using client verification:', err);
-      const stored = sessionStorage.getItem(`docusetu_otp_${email.toLowerCase().trim()}`);
-      if (stored === code.trim() || code.trim() === '123456') {
-        const id = 'user-' + Math.random().toString(36).substring(2, 10);
-        return {
-          message: 'Gmail successfully verified and authenticated',
-          token: `docusetu-jwt-${btoa(JSON.stringify({ id, email }))}`,
-          user: {
-            id,
-            email: email.trim().toLowerCase(),
-            organizationId: '11111111-1111-4111-8111-111111111111',
-            organizationName: organizationName || 'Apex Global Freight & Customs Brokerage',
-            role: 'Customs Broker & Compliance Officer'
-          }
-        };
-      }
-      throw new Error(err.message || 'Invalid or expired OTP code.');
+  async verifyOtp(email: string, code: string, organizationName?: string, fullName?: string) {
+    const res = await safeFetch(`${API_BASE}/auth/otp/verify`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: email.trim().toLowerCase(), code: code.trim(), organizationName, fullName })
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.error || 'Invalid or expired verification code.');
     }
+    return data;
   },
 
   async syncUser(user: { id: string; email: string; organizationId?: string; role?: string; fullName?: string }) {

@@ -227,8 +227,8 @@ export function validateGmail(email: string): GmailValidationResult {
 
   const [username, domain] = parts;
 
-  // Domain verification: must be gmail.com
-  if (domain !== 'gmail.com') {
+  // Domain verification: must be gmail.com or googlemail.com
+  if (domain !== 'gmail.com' && domain !== 'googlemail.com') {
     return {
       isValid: false,
       error: `Invalid domain "@${domain}". Only valid @gmail.com accounts are permitted.`
@@ -239,8 +239,8 @@ export function validateGmail(email: string): GmailValidationResult {
     return { isValid: false, error: 'Username before @ cannot be empty.' };
   }
 
-  if (username.length < 3) {
-    return { isValid: false, error: 'Gmail username must be at least 3 characters long.' };
+  if (username.length < 6) {
+    return { isValid: false, error: 'Gmail username must be at least 6 characters long (e.g., officer.smith@gmail.com).' };
   }
 
   if (username.length > 30) {
@@ -255,15 +255,15 @@ export function validateGmail(email: string): GmailValidationResult {
     return { isValid: false, error: 'Gmail username cannot contain consecutive periods (..).' };
   }
 
-  // Allowed characters in Gmail username: letters, digits, dots, pluses, dashes
-  const validCharsRegex = /^[a-z0-9._+-]+$/;
+  // Allowed characters in genuine Gmail username: letters, digits, and dots
+  const validCharsRegex = /^[a-z0-9.]+$/;
   if (!validCharsRegex.test(username)) {
-    return { isValid: false, error: 'Gmail username contains invalid special characters.' };
+    return { isValid: false, error: 'Gmail usernames may only contain letters (a-z), numbers (0-9), and periods (.).' };
   }
 
   return {
     isValid: true,
-    normalizedEmail: `${username}@gmail.com`
+    normalizedEmail: `${username}@${domain}`
   };
 }
 

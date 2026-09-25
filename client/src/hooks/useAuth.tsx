@@ -17,14 +17,12 @@ interface AuthContextType {
   token: string | null;
   isLoading: boolean;
   isAuthenticated: boolean;
-  lastGeneratedOtp: string | null;
   validateGmail: (email: string) => GmailValidationResult;
-  sendOtp: (email: string) => Promise<{ code?: string; message: string; expiresInSeconds?: number }>;
+  sendOtp: (email: string) => Promise<{ message: string; expiresInSeconds?: number }>;
   verifyOtp: (email: string, code: string, fullName?: string) => Promise<UserProfile>;
   login: (email: string, password?: string) => Promise<void>;
   loginAsDemo: () => void;
   logout: () => void;
-  clearLastOtp: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -42,7 +40,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<UserProfile | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [lastGeneratedOtp, setLastGeneratedOtp] = useState<string | null>(null);
 
   useEffect(() => {
     // Check local storage for persistent session
@@ -56,13 +53,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       } catch {
         localStorage.removeItem('docusetu_user');
         localStorage.removeItem('docusetu_auth_token');
+        setUser(null);
+        setToken(null);
       }
     } else {
-      // Default to demo session for instant out-of-the-box experience
-      setUser(DEMO_USER);
-      setToken('mock-token-docusetu-enterprise');
-      localStorage.setItem('docusetu_user', JSON.stringify(DEMO_USER));
-      localStorage.setItem('docusetu_auth_token', 'mock-token-docusetu-enterprise');
+      // STRICT SECURITY: Do NOT auto-authenticate! User MUST explicitly verify their Gmail
+      setUser(null);
+      setToken(null);
     }
 
     if (!isMockSupabase) {
@@ -70,7 +67,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (session?.user) {
           const profile: UserProfile = {
             id: session.user.id,
-            email: session.user.email || 'user@docusetu.io',
+            email: session.user.email || '',
             organizationId: '11111111-1111-4111-8111-111111111111',
             organizationName: 'Apex Global Freight & Customs Brokerage',
             role: 'Customs Officer',
@@ -86,7 +83,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   /**
-   * Request OTP code for a verified Gmail address
+   * Request OTP code for a strictly verified Gmail address
    */
   const sendOtp = async (email: string) => {
     setIsLoading(true);
@@ -96,7 +93,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         throw new Error(validation.error || 'Please provide a valid @gmail.com address.');
       }
 
-      // If remote Supabase is configured, optionally initiate Supabase OTP in parallel
+      // If remote Supabase is configured, trigger Supabase Auth OTP in parallel
       if (!isMockSupabase) {
         try {
           await supabase.auth.signInWithOtp({
@@ -108,11 +105,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       }
 
-      // Invoke server API for secure OTP generation & delivery
+      // Invoke server API for real email dispatch via SMTP / EmailService
       const res = await api.sendOtp(validation.normalizedEmail!);
-      if (res.code) {
-        setLastGeneratedOtp(res.code);
-      }
       return res;
     } finally {
       setIsLoading(false);
@@ -120,7 +114,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   /**
-   * Verify the 6-digit OTP and store user profile in Supabase
+   * Strictly verify the 6-digit OTP received in Gmail and store user profile in Supabase
    */
   const verifyOtp = async (email: string, code: string, fullName?: string): Promise<UserProfile> => {
     setIsLoading(true);
@@ -132,8 +126,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       const normalizedEmail = validation.normalizedEmail!;
 
-      // 1. Verify OTP with backend
-      const res = await api.verifyOtp(normalizedEmail, code);
+      // 1. Verify OTP with backend (timing-safe, SHA-256 hashed check)
+      const res = await api.verifyOtp(normalizedEmail, code, undefined, fullName);
 
       const profile: UserProfile = {
         id: res.user.id,
@@ -174,7 +168,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // 4. Update session
       setUser(profile);
       setToken(res.token);
-      setLastGeneratedOtp(null);
 
       localStorage.setItem('docusetu_user', JSON.stringify(profile));
       localStorage.setItem('docusetu_auth_token', res.token);
@@ -208,20 +201,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       }
 
-      // Fallback direct login
-      const profile: UserProfile = {
-        id: 'user-' + Math.random().toString(36).substring(2, 10),
-        email,
-        organizationId: '11111111-1111-4111-8111-111111111111',
-        organizationName: 'Apex Global Freight & Customs Brokerage',
-        role: 'Customs Officer',
-        fullName: email.split('@')[0]
-      };
-      const demoToken = 'mock-token-' + Math.random().toString(36).substring(2);
-      setUser(profile);
-      setToken(demoToken);
-      localStorage.setItem('docusetu_user', JSON.stringify(profile));
-      localStorage.setItem('docusetu_auth_token', demoToken);
+      throw new Error('Please use OTP verification to log in with your Gmail.');
     } finally {
       setIsLoading(false);
     }
@@ -237,16 +217,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const logout = () => {
     setUser(null);
     setToken(null);
-    setLastGeneratedOtp(null);
     localStorage.removeItem('docusetu_user');
     localStorage.removeItem('docusetu_auth_token');
     if (!isMockSupabase) {
       supabase.auth.signOut();
     }
-  };
-
-  const clearLastOtp = () => {
-    setLastGeneratedOtp(null);
   };
 
   return (
@@ -256,14 +231,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         token,
         isLoading,
         isAuthenticated: !!user,
-        lastGeneratedOtp,
         validateGmail,
         sendOtp,
         verifyOtp,
         login,
         loginAsDemo,
-        logout,
-        clearLastOtp
+        logout
       }}
     >
       {children}

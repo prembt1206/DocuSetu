@@ -15,14 +15,15 @@ import {
 import { handleGetSettings, handleUpdateSettings } from '../controllers/settingsController.js';
 import { handleGetDashboardInsights } from '../controllers/insightsController.js';
 import { handleSendOtp, handleVerifyOtp, handleSyncUser } from '../controllers/authController.js';
+import { otpSendLimiter, otpVerifyLimiter } from '../middlewares/rateLimitMiddleware.js';
 
 const router = Router();
 
 // ==========================================
 // Public Auth Endpoints (Exempt from authMiddleware)
 // ==========================================
-router.post('/auth/otp/send', handleSendOtp);
-router.post('/auth/otp/verify', handleVerifyOtp);
+router.post('/auth/otp/send', otpSendLimiter, handleSendOtp);
+router.post('/auth/otp/verify', otpVerifyLimiter, handleVerifyOtp);
 router.post('/auth/user', handleSyncUser);
 
 // Apply Auth Middleware to all protected API v1 routes
