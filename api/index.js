@@ -2914,7 +2914,7 @@ app.use(import_express2.default.json({ limit: "10mb" }));
 app.use(import_express2.default.urlencoded({ extended: true, limit: "10mb" }));
 var uploadsDir = import_path3.default.resolve(process.cwd(), "uploads");
 app.use("/uploads", import_express2.default.static(uploadsDir));
-app.get("/health", (req, res) => {
+app.get(["/health", "/api/health", "/api/v1/health"], (req, res) => {
   res.json({
     status: "healthy",
     securityShield: "Active (Helmet + RateLimiter + TimingSafeEqual)",
@@ -2924,6 +2924,7 @@ app.get("/health", (req, res) => {
   });
 });
 app.use("/api/v1", routes_default);
+app.use("/v1", routes_default);
 app.use(errorHandler);
 var isServerless = Boolean(
   process.env.VERCEL || process.env.VERCEL_ENV || process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.LAMBDA_TASK_ROOT || process.env.NOW_REGION
@@ -2943,4 +2944,4 @@ var index_default = app;
 0 && (module.exports = {
   app
 });
-module.exports = module.exports.default || module.exports.app || module.exports;
+function handler(req,res){try{return app(req,res);}catch(e){res.statusCode=500;res.setHeader('Content-Type','application/json');res.end(JSON.stringify({error:e.message,stack:e.stack}));}};handler.app=app;handler.default=handler;module.exports=handler;

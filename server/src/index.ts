@@ -61,7 +61,7 @@ const uploadsDir = path.resolve(process.cwd(), 'uploads');
 app.use('/uploads', express.static(uploadsDir));
 
 // Health check endpoint
-app.get('/health', (req, res) => {
+app.get(['/health', '/api/health', '/api/v1/health'], (req, res) => {
   res.json({
     status: 'healthy',
     securityShield: 'Active (Helmet + RateLimiter + TimingSafeEqual)',
@@ -71,8 +71,9 @@ app.get('/health', (req, res) => {
   });
 });
 
-// Mount API v1
+// Mount API v1 (both with and without /api prefix for flexible reverse proxying)
 app.use('/api/v1', apiRouter);
+app.use('/v1', apiRouter);
 
 // Error Handling Middleware
 app.use(errorHandler);
