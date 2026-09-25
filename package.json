@@ -12,10 +12,10 @@
     "dev:server": "npm run dev --prefix server",
     "dev:client": "npm run dev --prefix client",
     "build": "cd client && npm run build",
-    "build:all": "cd server && npm run build && cd ../client && npm run build && cd .. && npx esbuild server/src/app.ts --bundle --platform=node --target=node20 --format=cjs --outfile=api/index.js --external:pdf-parse --footer:js=\"function handler(req,res){try{return app(req,res);}catch(e){res.statusCode=500;res.setHeader('Content-Type','application/json');res.end(JSON.stringify({error:e.message,stack:e.stack}));}};handler.app=app;handler.default=handler;module.exports=handler;\"",
+    "build:all": "cd server && npm run build && cd ../client && npm run build && cd .. && npx esbuild server/src/app.ts --bundle --platform=node --target=node20 --format=cjs --outfile=api/index.js --external:pdf-parse --footer:js=\"function handler(req,res){try{return app(req,res);}catch(e){res.statusCode=500;res.setHeader('Content-Type','application/json');res.end(JSON.stringify({error:e.message,stack:e.stack}));}};handler.app=app;handler.default=handler;module.exports=handler;\" && node -e \"require('fs').copyFileSync('api/index.js','api/[...all].js')\"",
     "build:server": "cd server && npm run build",
     "build:client": "cd client && npm run build",
-    "build:api": "npx esbuild server/src/app.ts --bundle --platform=node --target=node20 --format=cjs --outfile=api/index.js --external:pdf-parse --footer:js=\"function handler(req,res){try{return app(req,res);}catch(e){res.statusCode=500;res.setHeader('Content-Type','application/json');res.end(JSON.stringify({error:e.message,stack:e.stack}));}};handler.app=app;handler.default=handler;module.exports=handler;\""
+    "build:api": "npx esbuild server/src/app.ts --bundle --platform=node --target=node20 --format=cjs --outfile=api/index.js --external:pdf-parse --footer:js=\"function handler(req,res){try{return app(req,res);}catch(e){res.statusCode=500;res.setHeader('Content-Type','application/json');res.end(JSON.stringify({error:e.message,stack:e.stack}));}};handler.app=app;handler.default=handler;module.exports=handler;\" && node -e \"require('fs').copyFileSync('api/index.js','api/[...all].js')\""
   },
   "devDependencies": {
     "@types/cors": "^2.8.17",
