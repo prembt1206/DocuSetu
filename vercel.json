@@ -3,15 +3,10 @@
   "buildCommand": "npm run build:all",
   "outputDirectory": "client/dist",
   "framework": "vite",
-  "functions": {
-    "api/index.ts": {
-      "includeFiles": "server/**"
-    }
-  },
   "rewrites": [
     {
       "source": "/api/(.*)",
-      "destination": "/api/index.ts"
+      "destination": "/api/index.js"
     },
     {
       "source": "/((?!api/).*)",
