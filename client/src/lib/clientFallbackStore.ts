@@ -352,20 +352,42 @@ class ClientFallbackStore {
   }
 
   getShipment(id: string): { shipment: ClientShipment; documents: ClientDocument[]; anomalies: ClientAnomaly[] } {
-    const shipment = this.shipments.get(id);
+    let shipment = this.shipments.get(id);
     if (!shipment) {
-      // Return first shipment as fallback if ID mismatch
-      const first = Array.from(this.shipments.values())[0];
-      return {
-        shipment: first,
-        documents: this.documents.get(first.id) || [],
-        anomalies: this.anomalies.get(first.id) || []
-      };
+      for (const s of this.shipments.values()) {
+        if (s.reference_number.toLowerCase() === id.toLowerCase() || s.id === id) {
+          shipment = s;
+          break;
+        }
+      }
     }
+
+    if (!shipment) {
+      const all = Array.from(this.shipments.values());
+      if (all.length > 0) {
+        shipment = all[0];
+      } else {
+        this.seed();
+        shipment = Array.from(this.shipments.values())[0];
+      }
+    }
+
+    const targetId = shipment ? shipment.id : id;
+    const docs = this.documents.get(targetId) || this.documents.get(id) || [];
+    const anoms = this.anomalies.get(targetId) || this.anomalies.get(id) || [];
+
     return {
-      shipment,
-      documents: this.documents.get(id) || [],
-      anomalies: this.anomalies.get(id) || []
+      shipment: shipment || {
+        id,
+        organization_id: '11111111-1111-4111-8111-111111111111',
+        reference_number: 'SHP-2026-9022',
+        status: 'ready_for_customs',
+        port_of_loading: 'Port of Nagoya, JP',
+        port_of_discharge: 'Port of Los Angeles, US',
+        created_at: new Date().toISOString()
+      },
+      documents: docs,
+      anomalies: anoms
     };
   }
 

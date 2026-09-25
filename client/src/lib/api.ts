@@ -5,10 +5,10 @@ const isLocalhost =
   typeof window !== 'undefined' &&
   (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
 
-// When deployed on Vercel or external domain, always use relative /api/v1 to avoid mixed content or localhost connection refused
+// When deployed on Vercel or external domain, use relative /api/v1 or configured VITE_API_BASE_URL
 const API_BASE = isLocalhost
-  ? (import.meta.env.VITE_API_BASE_URL || '/api/v1')
-  : '/api/v1';
+  ? (import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api/v1')
+  : (import.meta.env.VITE_API_BASE_URL || '/api/v1');
 
 const getAuthHeaders = (): Record<string, string> => {
   const token = localStorage.getItem('docusetu_auth_token') || 'mock-token';
@@ -34,6 +34,25 @@ async function safeFetch(url: string, options: RequestInit = {}): Promise<Respon
   }
 }
 
+/**
+ * Safely parse JSON responses and prevent SyntaxError when static hosts return HTML (e.g. <!doctype html>)
+ */
+async function safeJsonParse<T = any>(res: Response): Promise<{ success: boolean; data?: T; error?: string }> {
+  const contentType = res.headers.get('content-type') || '';
+  if (!contentType.includes('application/json')) {
+    return { success: false, error: 'Non-JSON response received' };
+  }
+  try {
+    const json = await res.json();
+    if (!res.ok) {
+      return { success: false, error: json.error || json.message || `HTTP ${res.status}` };
+    }
+    return { success: true, data: json };
+  } catch (e: any) {
+    return { success: false, error: e.message };
+  }
+}
+
 export const api = {
   // Shipments
   async getShipments() {
@@ -41,9 +60,12 @@ export const api = {
       const res = await safeFetch(`${API_BASE}/shipments`, {
         headers: { ...getAuthHeaders() }
       });
-      if (res.ok) return await res.json();
-    } catch (err) {
-      console.warn('API /shipments unreachable, using client fallback:', err);
+      const parsed = await safeJsonParse(res);
+      if (parsed.success && parsed.data) {
+        return parsed.data;
+      }
+    } catch {
+      // Backend offline or unreachable: fall back to persistent client store
     }
     return clientFallbackStore.getShipments();
   },
@@ -53,9 +75,12 @@ export const api = {
       const res = await safeFetch(`${API_BASE}/shipments/${id}`, {
         headers: { ...getAuthHeaders() }
       });
-      if (res.ok) return await res.json();
-    } catch (err) {
-      console.warn(`API /shipments/${id} unreachable, using client fallback:`, err);
+      const parsed = await safeJsonParse(res);
+      if (parsed.success && parsed.data) {
+        return parsed.data;
+      }
+    } catch {
+      // Fallback
     }
     return clientFallbackStore.getShipment(id);
   },
@@ -70,9 +95,12 @@ export const api = {
         },
         body: JSON.stringify(data)
       });
-      if (res.ok) return await res.json();
-    } catch (err) {
-      console.warn('API /shipments POST unreachable, using client fallback:', err);
+      const parsed = await safeJsonParse(res);
+      if (parsed.success && parsed.data) {
+        return parsed.data;
+      }
+    } catch {
+      // Fallback
     }
     return clientFallbackStore.createShipment(data);
   },
@@ -83,9 +111,12 @@ export const api = {
         method: 'POST',
         headers: { ...getAuthHeaders() }
       });
-      if (res.ok) return await res.json();
-    } catch (err) {
-      console.warn('API approve unreachable, using client fallback:', err);
+      const parsed = await safeJsonParse(res);
+      if (parsed.success && parsed.data) {
+        return parsed.data;
+      }
+    } catch {
+      // Fallback
     }
     return clientFallbackStore.approveShipment(id);
   },
@@ -95,18 +126,21 @@ export const api = {
       const res = await safeFetch(`${API_BASE}/shipments/${id}/insights`, {
         headers: { ...getAuthHeaders() }
       });
-      if (res.ok) return await res.json();
-    } catch (err) {
-      console.warn('API shipment insights unreachable, using client fallback:', err);
+      const parsed = await safeJsonParse(res);
+      if (parsed.success && parsed.data) {
+        return parsed.data;
+      }
+    } catch {
+      // Fallback
     }
     const { shipment, anomalies, documents } = clientFallbackStore.getShipment(id);
     const criticalCount = anomalies.filter((a) => a.severity === 'critical' && !a.resolved).length;
     const warningCount = anomalies.filter((a) => a.severity === 'warning' && !a.resolved).length;
     return {
       shipmentId: id,
-      referenceNumber: shipment.reference_number,
+      referenceNumber: shipment?.reference_number || id,
       readinessScore: Math.max(0, 100 - criticalCount * 40 - warningCount * 15),
-      status: shipment.status,
+      status: shipment?.status || 'pending',
       criticalAnomalies: criticalCount,
       warningAnomalies: warningCount,
       totalDocuments: documents.length,
@@ -132,9 +166,12 @@ export const api = {
         headers: { ...getAuthHeaders() },
         body: formData
       });
-      if (res.ok) return await res.json();
-    } catch (err) {
-      console.warn('API upload unreachable, using client fallback:', err);
+      const parsed = await safeJsonParse(res);
+      if (parsed.success && parsed.data) {
+        return parsed.data;
+      }
+    } catch {
+      // Fallback
     }
 
     // Client fallback upload simulation
@@ -160,9 +197,12 @@ export const api = {
         method: 'POST',
         headers: { ...getAuthHeaders() }
       });
-      if (res.ok) return await res.json();
-    } catch (err) {
-      console.warn('API process unreachable, using client fallback:', err);
+      const parsed = await safeJsonParse(res);
+      if (parsed.success && parsed.data) {
+        return parsed.data;
+      }
+    } catch {
+      // Fallback
     }
 
     // Client fallback process simulation
@@ -195,9 +235,12 @@ export const api = {
         },
         body: JSON.stringify({ dossierType })
       });
-      if (res.ok) return await res.json();
-    } catch (err) {
-      console.warn('API sample dossier unreachable, using client fallback:', err);
+      const parsed = await safeJsonParse(res);
+      if (parsed.success && parsed.data) {
+        return parsed.data;
+      }
+    } catch {
+      // Fallback
     }
     return clientFallbackStore.loadSampleDossier(dossierType);
   },
@@ -209,9 +252,12 @@ export const api = {
         method: 'POST',
         headers: { ...getAuthHeaders() }
       });
-      if (res.ok) return await res.json();
-    } catch (err) {
-      console.warn('API validate unreachable, using client fallback:', err);
+      const parsed = await safeJsonParse(res);
+      if (parsed.success && parsed.data) {
+        return parsed.data;
+      }
+    } catch {
+      // Fallback
     }
     const { shipment, anomalies } = clientFallbackStore.getShipment(shipmentId);
     return {
@@ -228,9 +274,12 @@ export const api = {
         method: 'POST',
         headers: { ...getAuthHeaders() }
       });
-      if (res.ok) return await res.json();
-    } catch (err) {
-      console.warn('API resolve anomaly unreachable, using client fallback:', err);
+      const parsed = await safeJsonParse(res);
+      if (parsed.success && parsed.data) {
+        return parsed.data;
+      }
+    } catch {
+      // Fallback
     }
     return clientFallbackStore.resolveAnomaly(anomalyId);
   },
@@ -241,9 +290,12 @@ export const api = {
       const res = await safeFetch(`${API_BASE}/settings`, {
         headers: { ...getAuthHeaders() }
       });
-      if (res.ok) return await res.json();
-    } catch (err) {
-      console.warn('API get settings unreachable, using client fallback:', err);
+      const parsed = await safeJsonParse(res);
+      if (parsed.success && parsed.data) {
+        return parsed.data;
+      }
+    } catch {
+      // Fallback
     }
     return clientFallbackStore.getSettings();
   },
@@ -258,9 +310,12 @@ export const api = {
         },
         body: JSON.stringify(settings)
       });
-      if (res.ok) return await res.json();
-    } catch (err) {
-      console.warn('API update settings unreachable, using client fallback:', err);
+      const parsed = await safeJsonParse(res);
+      if (parsed.success && parsed.data) {
+        return parsed.data;
+      }
+    } catch {
+      // Fallback
     }
     return clientFallbackStore.updateSettings(settings);
   },
@@ -271,9 +326,12 @@ export const api = {
       const res = await safeFetch(`${API_BASE}/insights`, {
         headers: { ...getAuthHeaders() }
       });
-      if (res.ok) return await res.json();
-    } catch (err) {
-      console.warn('API /insights unreachable, using client fallback:', err);
+      const parsed = await safeJsonParse(res);
+      if (parsed.success && parsed.data) {
+        return parsed.data;
+      }
+    } catch {
+      // Fallback
     }
     return clientFallbackStore.getDashboardInsights();
   },
@@ -285,11 +343,11 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email: email.trim().toLowerCase() })
     });
-    const data = await res.json();
-    if (!res.ok) {
-      throw new Error(data.error || 'Failed to send OTP verification code to Gmail.');
+    const parsed = await safeJsonParse(res);
+    if (!parsed.success) {
+      throw new Error(parsed.error || 'Failed to dispatch verification code to Gmail.');
     }
-    return data;
+    return parsed.data;
   },
 
   async verifyOtp(email: string, code: string, organizationName?: string, fullName?: string) {
@@ -298,11 +356,11 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email: email.trim().toLowerCase(), code: code.trim(), organizationName, fullName })
     });
-    const data = await res.json();
-    if (!res.ok) {
-      throw new Error(data.error || 'Invalid or expired verification code.');
+    const parsed = await safeJsonParse(res);
+    if (!parsed.success) {
+      throw new Error(parsed.error || 'Invalid or expired verification code.');
     }
-    return data;
+    return parsed.data;
   },
 
   async syncUser(user: { id: string; email: string; organizationId?: string; role?: string; fullName?: string }) {
@@ -318,9 +376,10 @@ export const api = {
         },
         body: JSON.stringify(user)
       });
-      if (res.ok) return await res.json();
-    } catch (err) {
-      console.warn('API /auth/user sync failed:', err);
+      const parsed = await safeJsonParse(res);
+      if (parsed.success && parsed.data) return parsed.data;
+    } catch {
+      // Fallback handled
     }
     return { user };
   }
